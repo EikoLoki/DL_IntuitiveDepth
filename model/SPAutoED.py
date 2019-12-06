@@ -7,13 +7,19 @@ import submodule
 class SPAutoED(nn.Module):
     def __init__(self):
         super(SPAutoED, self).__init__()
-        
+        self.SP_extractor = SP_Feature_Extractor
+        self.EDcoder = AutoED
+
+    def forward(self, x):
+        # extract features:
+        feature = self.SP_extractor(x)
+        depth = self.EDcoder(feature,x)
+        return depth
 
 
-
-class SPEncoder(nn.Module):
+class SP_Feature_Extractor(nn.Module):
     def __init__(self):
-        super(SPEncoder, self).__init__()
+        super(SP_Feature_Extractor, self).__init__()
         
         # feature extractor part:
         self.conv0 = nn.Sequential(
@@ -56,16 +62,11 @@ class SPEncoder(nn.Module):
         )
 
         # merge part:
-        self.encode = nn.Sequential(
+        self.fusion = nn.Sequential(
             convbn(320,128,3,2,1,1),
-            nn.ReLU(inplace=True),
-            nn.MaxPool2d(),             # output size: H/8*W/8*128
-            convbn(128,256,3,2,1,1),
-            nn.ReLU(inplace=True),      
-            nn.MaxPool2d(),             # output size: H/16*W/16*256
-            convbn(256,512,3,1,1,1),     
-            nn.ReLU(inplace=True),
-            nn.MaxPool2d()              # output size: H/32*H/32*512
+            nn.ReLU(inplace=True),  # output size: H/4*W/4*128
+            convbn(128,32,1,1,0,1),
+            nn.ReLU(inplace=True),  # output size: H/4*W/4*32 
             )
 
     def _make_layer(self, block, in_planes, out_planes, block_num, stride, pad, dilation):
@@ -95,8 +96,131 @@ class SPEncoder(nn.Module):
         output_branch4 = self.branch4(output_dila)
         output_branch4 = F.upsample(output_branch4, (output_dila.size()[2],output_dila.size()[3]),mode='bilinear')
 
-
         output_feature = torch.cat((output_raw, output_dila, output_branch1, output_branch2, output_branch3, output_branch4), 1)
-        output_feature = self.encode(output_feature)
+        output_feature = self.fusion(output_feature)
 
         return output_feature 
+
+
+class AutoED(nn.Module):
+    def __init__(self):
+        super(AutoED, self).__init__()
+        # This AutoED does not have resblock inside, but has skip connection.
+        # input size: 1/4H*1/4*W*32
+        # Encoder part:
+        self.conv1 = nn.Sequential(
+            convbn(32, 64, 3, 1, 1, 1),
+            nn.ReLU(inplace=True),          # output size: 1/4H*1/4*W*64
+            convbn(64, 64, 3, 1, 1, 1),
+            nn.ReLU(inplace=True),          # output size: 1/4H*1/4*W*64
+                           
+        )
+
+        self.conv2 = nn.Sequential(
+            nn.MaxPool2d(2,2)               # output size: 1/8H*1/8W*64
+            convbn(64, 128, 3, 1, 1, 1),
+            nn.ReLU(inplace=True),          # output size: 1/8H*1/8W*128
+            convbn(128, 128, 3, 1, 1, 1),
+            nn.ReLU(inplace=True),          # output size: 1/8H*1/8W*128                 
+        )
+
+        self.conv3 = nn.Sequential(
+            nn.MaxPool2d(2,2)               # output size: 1/16H*1/16W*128
+            convbn(128, 256, 3, 1, 1, 1),
+            nn.ReLU(inplace=True),          # output size: 1/16H*1/16W*256
+            convbn(256, 256, 3, 1, 1, 1),
+            nn.ReLU(inplace=True),          # output size: 1/16H*1/16W*256
+            convbn(256, 256, 3, 1, 1, 1),
+            nn.ReLU(inplace=True)           # output size: 1/16H*1/16W*256
+        )
+
+        self.conv4 = nn.Sequential(
+            nn.MaxPool2d(2,2)               # output size: 1/32H*1/32W*256
+            convbn(256, 512, 3, 1, 1, 1), 
+            nn.ReLU(inplace=True),          # output size: 1/32H*1/32W*512
+            convbn(512, 512, 3, 1, 1, 1),
+            nn.ReLU(inplace=True),          # output size: 1/32H*1/32W*512
+            convbn(512, 512, 3, 1, 1, 1),
+            nn.ReLU(inplace=True),          # output size: 1/32H*1/32W*512
+
+        )
+
+        # Connection part:
+        self.coder = nn.Sequential(
+            nn.MaxPool2d(2,2)               # output size: 1/64H*1/64W*512
+            convbn(512, 512, 3, 1, 1, 1),   
+            nn.ReLU(inplace=True)           # output size: 1/64H*1/64W*512
+            nn.MaxUnpool2d(2,2)             # output size: 1/32H*1/32W*512
+        )
+
+        # Decoder part:
+        self.deconv1 = nn.Sequential(
+            deconvbn(512, 512, 3, 1, 1, 1), 
+            nn.ReLU(inplace=True)           # output size: 1/32H*1/32W*512
+            deconvbn(512, 512, 3, 1, 1, 1),
+            nn.ReLU(inplace=True),          # output size: 1/32H*1/32W*512
+            deconvbn(512, 256, 3, 1, 1, 1),
+            nn.ReLU(inplace=True)           # output size: 1/32H*1/32W*256
+        )
+
+        self.deconv2 = nn.Sequential(
+            nn.MaxUnpool2d(2,2)             # output size: 1/16H*1/16W*256
+            deconvbn(256, 256, 3, 1, 1, 1),
+            nn.ReLU(inplace=True),          # output size: 1/16H*1/16W*256
+            deconvbn(256, 256, 3, 1, 1, 1),
+            nn.ReLU(inplace=True),          # ouptut size: 1/16H*1/16W*256
+            deconvbn(256, 128, 3, 1, 1, 1),
+            nn.ReLU(inplace=True)           # output size: 1/16H*1/16W*128
+        )
+
+        self.deconv3 = nn.Sequential(
+            nn.MaxUnpool2d(2,2),            # output size: 1/8H*1/8W*128
+            deconvbn(128, 128, 3, 1, 1, 1),
+            nn.ReLU(inplace=True),          # output size: 1/8H*1/8W*128
+            deconvbn(128, 64, 3, 1, 1, 1),  
+            nn.ReLU(inplace=True)           # output size: 1/8H*1/8W*64
+        )
+
+        self.deconv4 = nn.Sequential(
+            nn.MaxUnpool2d(2,2),            # output size: 1/4H*1/4W*64
+            deconvbn(64, 64, 3, 1, 1, 1),
+            nn.ReLU(inplace=True),          # output size: 1/4H*1/4W*64
+            deconvbn(64, 32, 3, 1, 1, 1),
+            nn.ReLU(inplace=True)           # output size: 1/4H*1/4W*32
+        )
+
+        # Upsampling part:
+        self.upsample = nn.Sequential(
+            nn.UpsamplingBilinear2d(),
+            ResBlock(32, 3, 1, 0, 1),
+            nn.UpsamplingBilinear2d(),
+        )
+
+        self.refine = nn.Sequential(
+            ResBlock(6, 1, 1, 0, 1),
+        )
+
+    def forward(self, x, img):
+        # input size: 1/4H*1/4*W*32
+        # Encoder part:
+        out1 = self.conv1(x)            # output: 1/4(HxW)x64, skip connect to entry of deconv4
+        out2 = self.conv2(out1)         # output: 1/8(HxW)x128, skip connect to entry of deconv3
+        out3 = self.conv3(out2)         # output: 1/16(HxW)x256, skip connect to entry of deconv2
+        out4 = self.conv4(out3)         # output: 1/32(HxW)x512, skip connect to entry of deconv1
+        # connection part:
+        code = self.coder(out4)         # output: 1/32(HxW)x512
+        # Decoder part:
+        input1 = code + out4
+        input2 = self.deconv1(input1)   # output: 1/32(HxW)x256
+        input2 += out3
+        input3 = self.deconv2(input2)   # output: 1/16(HxW)x128
+        input3 += out2
+        input4 = self.deconv3(input3)   # output: 1/8(HxW)x64
+        input4 += out1
+        result = self.deconv4(input4)   # output: 1/4(HxW)x32
+        # upsample part:
+        depth = self.upsample(result)
+        depth = torch.cat((depth, img), 1)
+        depth = self.refine(depth)
+
+        return depth
