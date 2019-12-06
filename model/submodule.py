@@ -9,6 +9,13 @@ def convbn(in_planes, out_planes, kernel_size, stride, pad=0, dilation):
         nn.BatchNorm2d(out_planes)
     )
 
+def deconvbn(in_planes, out_planes, kernel_size, stride, pad=0, dilation):
+    return nn.Sequential(
+        nn.ConvTranspose2d(in_channels, out_channels, kernel_size, stride=stride, padding=dilation if dilation > 1 else pad, dilation=dilation),
+        nn.BatchNorm2d(out_planes)
+    )
+
+
 class ResBlock(nn.Module):
     def __init__(self, in_planes, out_planes, stride, pad, dilation):
         super(ResBlock, self).__init__()
@@ -32,5 +39,5 @@ class ResBlock(nn.Module):
             x = self.downsample_feature(x)
         
         out += x
-
+        out = F.relu(out, inplace=True)
         return out
