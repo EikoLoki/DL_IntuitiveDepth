@@ -153,11 +153,7 @@ def consistent_lr(left_disp, right_disp):
     
     return left_disp_recons.squeeze() - left_disp
 
-if __name__ == "__main__":
-    indx = 0
-    disp_dir = "data/disp"
-    img_dir = "data/sample"
-    num_ins = 8
+def load_exmaple(img_dir, disp_dir, num_ins):
 
     if torch.cuda.is_available():
         device = torch.device('cuda:0')
@@ -172,19 +168,28 @@ if __name__ == "__main__":
     right_disp = torch.empty(num_ins, h, w, dtype=torch.double, device = device)
 
     for i in range(num_ins):
-        disp_l, _ = readPFM( join(disp_dir, "left/frame_data{:>06}.pfm".format(indx)) )
-        disp_r, _ = readPFM( join(disp_dir, "right/frame_data{:>06}.pfm".format(indx)) )
+        disp_l, _ = readPFM( join(disp_dir, "left/frame_data{:>06}.pfm".format(i)) )
+        disp_r, _ = readPFM( join(disp_dir, "right/frame_data{:>06}.pfm".format(i)) )
 
         #disp_l = cv2.GaussianBlur(disp_l,(5,5),0)
-        img_left  = cv2.imread(join(img_dir, "left_finalpass/frame_data{:>06}.png".format(indx)))[:,:,::-1]
-        img_right = cv2.imread(join(img_dir, "right_finalpass/frame_data{:>06}.png".format(indx)) )[:,:,::-1]
+        img_left  = cv2.imread(join(img_dir, "left_finalpass/frame_data{:>06}.png".format(i)))[:,:,::-1]
+        img_right = cv2.imread(join(img_dir, "right_finalpass/frame_data{:>06}.png".format(i)) )[:,:,::-1]
 
         #visualize(img_left, img_right, disp_r)
         right_data[i, :, :, :] = torch.from_numpy(np.transpose(img_right/255.0,(2,0,1)))
         left_data[i, :, :, :] = torch.from_numpy(np.transpose(img_left/255.0,(2,0,1)))
         left_disp[i, :, :] = torch.from_numpy(disp_l)
         right_disp[i, :, :] = torch.from_numpy(disp_r)
+    return right_data, left_data, left_disp, right_disp
 
+
+if __name__ == "__main__":
+    
+    disp_dir = "data/disp"
+    img_dir = "data/sample"
+    num_ins = 8
+
+    right_data, left_data, left_disp, right_disp = load_exmaple(img_dir, disp_dir, num_ins)
 
     start = time.process_time()
     left_recons = reconstruct_left(right_data, left_disp)
