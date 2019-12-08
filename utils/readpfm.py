@@ -65,6 +65,7 @@ def visualize(img_left, img_right, data):
     print("OK")
 
 def SSIM(x, y, ksize = 3):
+    
     C1 = 0.01 ** 2
     C2 = 0.03 ** 2
     ps = ksize//2
@@ -79,13 +80,18 @@ def SSIM(x, y, ksize = 3):
     SSIM_d = ((mu_x * mu_x + mu_y * mu_y) + C1) * (sigma_x + sigma_y + C2)
 
     loss_SSIM = SSIM_n / SSIM_d
-    print(loss_SSIM.shape)
 
     #return tf.clip_by_value((1 - SSIM) / 2, 0, 1)
     return (1 - loss_SSIM) / 2
 
 def reconstruct_left(right_data, left_disp):
-
+    '''
+    Args:
+        right data [N, C, H, W]
+        left disp [N, H, W]
+    Return:
+        right_recons [N, C, H, W]
+    '''
     n, _, h, w = right_data.shape
     device = right_data.device
 
@@ -101,7 +107,13 @@ def reconstruct_left(right_data, left_disp):
     return left_recons
 
 def reconstruct_right(left_data, right_disp):
-
+    '''
+    Args:
+        left data [N, C, H, W]
+        right disp [N, H, W]
+    Return:
+        right_recons [N, C, H, W]
+    '''
     n, _, h, w = left_data.shape
     device = left_data.device
 
@@ -115,6 +127,31 @@ def reconstruct_right(left_data, right_disp):
     right_recons = F.grid_sample(left_data, right_grid, mode='bilinear', padding_mode='zeros')
 
     return right_recons
+
+def consistent_lr(left_disp, right_disp):
+    '''
+    Args:
+        left_disp [N, H, W]
+        right_disp [N, H, W]
+    Return:
+        lr_loss [N, H, W]
+    '''
+
+    n, h, w = left_disp.shape
+    device = left_disp.device
+
+    grid_u, grid_v = torch.meshgrid(torch.arange(-1, 1, 2/h, dtype=torch.double), torch.arange(-1,1,2/w, dtype=torch.double))
+
+    left_grid = torch.empty(n, h, w, 2, dtype= torch.double, device=device)
+    
+    left_grid[:,:,:,1] = grid_u.repeat([n,1,1])
+    left_grid[:,:,:,0] = grid_v.repeat([n,1,1])
+    left_grid[:,:,:,0] -= 2*left_disp/w 
+    
+    right_disp_sample = right_disp.unsqueeze(1)
+    left_disp_recons = F.grid_sample(right_disp_sample, left_grid, mode='bilinear', padding_mode='zeros')
+    
+    return left_disp_recons.squeeze() - left_disp
 
 if __name__ == "__main__":
     indx = 0
@@ -148,14 +185,8 @@ if __name__ == "__main__":
         left_disp[i, :, :] = torch.from_numpy(disp_l)
         right_disp[i, :, :] = torch.from_numpy(disp_r)
 
-    
-    #visualize(img_left, img_right, disp_l)
-    
-    # right_data = torch.from_numpy(np.transpose(img_right/255.0,(2,0,1))).unsqueeze(0)
-    # left_data = torch.from_numpy(np.transpose(img_left/255.0,(2,0,1))).unsqueeze(0)
-    # left_disp = torch.from_numpy(disp_l.astype(np.double))
-    start = time.process_time()
 
+    start = time.process_time()
     left_recons = reconstruct_left(right_data, left_disp)
     right_recons = reconstruct_right(left_data, right_disp)
     print(time.process_time() - start)
@@ -163,14 +194,17 @@ if __name__ == "__main__":
     res_loss_l = SSIM(left_recons, left_data)
     print(time.process_time() - start)
 
-    indx = 0
-    img_r_res = right_recons.numpy()[indx, :,:,:]
-    img_r_res = np.transpose(img_r_res, (1,2,0))
-    img_right = right_data.numpy()[indx, :,:,:]
-    img_right = np.transpose(img_right, (1,2,0))
-    loss_vis_r = np.linalg.norm(res_loss_r[indx, :, :, :].numpy().squeeze(), axis=0)
-    visualize(img_right, img_r_res, loss_vis_r)
+    loss_lr = consistent_lr(left_disp, right_disp)
 
+    # indx = 0
+    # img_r_res = right_recons.numpy()[indx, :,:,:]
+    # img_r_res = np.transpose(img_r_res, (1,2,0))
+    # img_right = right_data.numpy()[indx, :,:,:]
+    # img_right = np.transpose(img_right, (1,2,0))
+    # loss_vis_r = np.linalg.norm(res_loss_r[indx, :, :, :].numpy().squeeze(), axis=0)
+    # loss_lr_i = loss_lr[indx, :, :].numpy()
+    # visualize(img_right, img_r_res, loss_lr_i)
+    
     # indx = 0
     # img_l_res = left_recons.numpy()[indx, :,:,:]
     # img_l_res = np.transpose(img_l_res, (1,2,0))
