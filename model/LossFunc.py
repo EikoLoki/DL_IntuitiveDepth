@@ -36,13 +36,17 @@ class Loss_reonstruct(nn.Module):
 
 if __name__ == "__main__":
     from utils.disp_utils import load_exmaple
+    import time 
+
     disp_dir = "data/disp"
     img_dir = "data/sample"
-    num_ins = 8
+    num_ins = 20
     right_data, left_data, left_disp, right_disp = load_exmaple(img_dir, disp_dir, num_ins)
 
     loss = Loss_reonstruct()
     
+    start = time.process_time()
     output = loss(left_data, right_data, left_disp, right_disp)
-    #print(output)
-    print("OK")
+    print(time.process_time() - start)
+    
+    print(output)
