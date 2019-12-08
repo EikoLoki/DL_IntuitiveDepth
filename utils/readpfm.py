@@ -59,7 +59,7 @@ def visualize(img_left, img_right, data):
     fig, axes = plt.subplots(1,3)
     axes[0].imshow(img_left)
     axes[1].imshow(img_right)
-    axes[2].imshow((data+1e-4), cmap="Greys")
+    axes[2].imshow((data+1e-4), cmap="plasma")
     fig.show()
     input("Any key to continue")
     print("OK")
@@ -100,12 +100,27 @@ def reconstruct_left(right_data, left_disp):
 
     return left_recons
 
+def reconstruct_right(left_data, right_disp):
+
+    n, _, h, w = left_data.shape
+    device = left_data.device
+
+    grid_u, grid_v = torch.meshgrid(torch.arange(-1, 1, 2/h, dtype=torch.double), torch.arange(-1,1,2/w, dtype=torch.double))
+    right_grid = torch.empty(n, h, w, 2, dtype= torch.double, device=device)
+    
+    right_grid[:,:,:,1] = grid_u.repeat([n,1,1])
+    right_grid[:,:,:,0] = grid_v.repeat([n,1,1])
+    right_grid[:,:,:,0] += 2*right_disp/w 
+    
+    right_recons = F.grid_sample(left_data, right_grid, mode='bilinear', padding_mode='zeros')
+
+    return right_recons
 
 if __name__ == "__main__":
     indx = 0
     disp_dir = "data/disp"
     img_dir = "data/sample"
-    num_ins = 8
+    num_ins = 2
 
     if torch.cuda.is_available():
         device = torch.device('cuda:0')
@@ -114,21 +129,24 @@ if __name__ == "__main__":
 
     disp_l, scale = readPFM( join(disp_dir, "left/frame_data{:>06}.pfm".format(0)) )
     h, w = disp_l.shape
-    right_data = torch.empty(num_ins, 3, h, w, dtype=torch.double).to(device)
-    left_data = torch.empty(num_ins, 3, h, w, dtype=torch.double).to(device)
-    left_disp = torch.empty(num_ins, h, w, dtype=torch.double).to(device)
+    right_data = torch.empty(num_ins, 3, h, w, dtype=torch.double, device = device)
+    left_data = torch.empty(num_ins, 3, h, w, dtype=torch.double, device = device)
+    left_disp = torch.empty(num_ins, h, w, dtype=torch.double, device = device)
+    right_disp = torch.empty(num_ins, h, w, dtype=torch.double, device = device)
 
     for i in range(num_ins):
         disp_l, _ = readPFM( join(disp_dir, "left/frame_data{:>06}.pfm".format(indx)) )
         disp_r, _ = readPFM( join(disp_dir, "right/frame_data{:>06}.pfm".format(indx)) )
-        
+
         #disp_l = cv2.GaussianBlur(disp_l,(5,5),0)
         img_left  = cv2.imread(join(img_dir, "left_finalpass/frame_data{:>06}.png".format(indx)))[:,:,::-1]
         img_right = cv2.imread(join(img_dir, "right_finalpass/frame_data{:>06}.png".format(indx)) )[:,:,::-1]
-        visualize(img_left, img_right, disp_r)
+
+        #visualize(img_left, img_right, disp_r)
         right_data[i, :, :, :] = torch.from_numpy(np.transpose(img_right/255.0,(2,0,1)))
         left_data[i, :, :, :] = torch.from_numpy(np.transpose(img_left/255.0,(2,0,1)))
         left_disp[i, :, :] = torch.from_numpy(disp_l)
+        right_disp[i, :, :] = torch.from_numpy(disp_r)
 
     
     #visualize(img_left, img_right, disp_l)
@@ -139,20 +157,25 @@ if __name__ == "__main__":
     start = time.process_time()
 
     left_recons = reconstruct_left(right_data, left_disp)
+    right_recons = reconstruct_right(left_data, right_disp)
     print(time.process_time() - start)
-    res_loss = SSIM(left_recons, left_data)
+    res_loss_r = SSIM(right_recons, right_data)
+    res_loss_l = SSIM(left_recons, left_data)
     print(time.process_time() - start)
-    # print(res_loss.shape)
-    # img_l_res = left_recons.numpy().squeeze()
-    # img_l_res = np.transpose(img_l_res, (1,2,0))
-    # loss_vis = np.mean(res_loss.numpy().squeeze(), axis=0)
+
+
+    indx = 0
+    img_r_res = right_recons.numpy()[indx, :,:,:]
+    img_r_res = np.transpose(img_r_res, (1,2,0))
+    img_right = right_data.numpy()[indx, :,:,:]
+    img_right = np.transpose(img_right, (1,2,0))
+    loss_vis_r = np.linalg.norm(res_loss_r[indx, :, :, :].numpy().squeeze(), axis=0)
+    visualize(img_right, img_r_res, loss_vis_r)
 
     # indx = 0
     # img_l_res = left_recons.numpy()[indx, :,:,:]
     # img_l_res = np.transpose(img_l_res, (1,2,0))
     # img_left = left_data.numpy()[indx, :,:,:]
     # img_left = np.transpose(img_left, (1,2,0))
-    # loss_vis = np.mean(res_loss[indx, :, :, :].numpy().squeeze(), axis=0)
-    
-    # visualize(img_left, img_l_res, loss_vis)
-    
+    # loss_vis_l = np.mean(res_loss_l[indx, :, :, :].numpy().squeeze(), axis=0)
+    # visualize(img_left, img_l_res, loss_vis_l)
