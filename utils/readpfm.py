@@ -87,7 +87,7 @@ def SSIM(x, y, ksize = 3):
 def reconstruct_left(right_data, left_disp):
 
     n, _, h, w = right_data.shape
-    device = right_data.device()
+    device = right_data.device
 
     grid_u, grid_v = torch.meshgrid(torch.arange(-1, 1, 2/h, dtype=torch.double), torch.arange(-1,1,2/w, dtype=torch.double))
     left_grid = torch.empty(n, h, w, 2, dtype= torch.double, device=device)
@@ -105,7 +105,7 @@ if __name__ == "__main__":
     indx = 0
     disp_dir = "data/sample_disp"
     img_dir = "data/sample"
-    num_ins = 1
+    num_ins = 8
 
     if torch.cuda.is_available():
         device = torch.device('cuda:0')
