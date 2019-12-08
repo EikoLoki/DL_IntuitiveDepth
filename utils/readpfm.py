@@ -163,7 +163,6 @@ if __name__ == "__main__":
     res_loss_l = SSIM(left_recons, left_data)
     print(time.process_time() - start)
 
-
     indx = 0
     img_r_res = right_recons.numpy()[indx, :,:,:]
     img_r_res = np.transpose(img_r_res, (1,2,0))
