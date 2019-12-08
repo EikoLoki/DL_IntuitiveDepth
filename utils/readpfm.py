@@ -103,7 +103,7 @@ def reconstruct_left(right_data, left_disp):
 
 if __name__ == "__main__":
     indx = 0
-    disp_dir = "data/sample_disp"
+    disp_dir = "data/disp"
     img_dir = "data/sample"
     num_ins = 1
 
@@ -112,17 +112,20 @@ if __name__ == "__main__":
     else:
         device = torch.device('cpu')
 
-    disp_l, scale = readPFM( join(disp_dir, "frame_data{:>06}.pfm".format(0)) )
+    disp_l, scale = readPFM( join(disp_dir, "left/frame_data{:>06}.pfm".format(0)) )
     h, w = disp_l.shape
     right_data = torch.empty(num_ins, 3, h, w, dtype=torch.double).to(device)
     left_data = torch.empty(num_ins, 3, h, w, dtype=torch.double).to(device)
     left_disp = torch.empty(num_ins, h, w, dtype=torch.double).to(device)
 
     for i in range(num_ins):
-        disp_l, scale = readPFM( join(disp_dir, "frame_data{:>06}.pfm".format(indx)) )
+        disp_l, _ = readPFM( join(disp_dir, "left/frame_data{:>06}.pfm".format(indx)) )
+        disp_r, _ = readPFM( join(disp_dir, "right/frame_data{:>06}.pfm".format(indx)) )
+        
         #disp_l = cv2.GaussianBlur(disp_l,(5,5),0)
         img_left  = cv2.imread(join(img_dir, "left_finalpass/frame_data{:>06}.png".format(indx)))[:,:,::-1]
         img_right = cv2.imread(join(img_dir, "right_finalpass/frame_data{:>06}.png".format(indx)) )[:,:,::-1]
+        visualize(img_left, img_right, disp_r)
         right_data[i, :, :, :] = torch.from_numpy(np.transpose(img_right/255.0,(2,0,1)))
         left_data[i, :, :, :] = torch.from_numpy(np.transpose(img_left/255.0,(2,0,1)))
         left_disp[i, :, :] = torch.from_numpy(disp_l)
