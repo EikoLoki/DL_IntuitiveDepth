@@ -157,7 +157,7 @@ if __name__ == "__main__":
     indx = 0
     disp_dir = "data/disp"
     img_dir = "data/sample"
-    num_ins = 2
+    num_ins = 8
 
     if torch.cuda.is_available():
         device = torch.device('cuda:0')
@@ -192,9 +192,11 @@ if __name__ == "__main__":
     print(time.process_time() - start)
     res_loss_r = SSIM(right_recons, right_data)
     res_loss_l = SSIM(left_recons, left_data)
+    loss_lr = consistent_lr(left_disp, right_disp)
+    
     print(time.process_time() - start)
 
-    loss_lr = consistent_lr(left_disp, right_disp)
+    
 
     # indx = 0
     # img_r_res = right_recons.numpy()[indx, :,:,:]

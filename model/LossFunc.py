@@ -4,37 +4,28 @@
 # customed loss function, extension of torch.Module
 import torch
 import torch.nn.functional as F
-
+from utils.disp_utils import reconstruct_left, reconstruct_right, SSIM, consistent_lr
 class Loss_reonstruct(nn.Module):
     def __init__(self):
         super(Loss_reonstruct, self).__init__()
         self.param = 0
 
-    def forward(self, left, right, l_disp, r_disp):
-        pass 
-    
-    def SSIM(self, x, y):
-        C1 = 0.01 ** 2
-        C2 = 0.03 ** 2
-        
+    def forward(self, left_data, right_data, left_disp, right_disp):
+        '''
+        Loss function for the disparity, consists of reconstruction loss for left and right, and left-right disparity consistency
+        Args:
+            left_data  [N, C, H, W]
+            right_data [N, C, H, W]
+            left_disp  [N, H, W]
+            right_disp [N, H, W]
+        Return:
+            lr_loss [N, H, W]
+        '''
+        left_recons = reconstruct_left(right_data, left_disp)
+        right_recons = reconstruct_right(left_data, right_disp)
+        res_loss_r = SSIM(right_recons, right_data)
+        res_loss_l = SSIM(left_recons, left_data)
+        loss_lr = consistent_lr(left_disp, right_disp)
 
-        mu_x = F.avg_pool2d(x, kernel_size=3, stride=1)
-        mu_y = F.avg_pool2d(y, kernel_size=3, stride=1)
-        # mu_x = slim.avg_pool2d(x, 3, 1, 'VALID')
-        # mu_y = slim.avg_pool2d(y, 3, 1, 'VALID')
+        return F.l1_loss(res_loss_r) + F.l1_loss(res_loss_l) + F.l1_loss(loss_lr)
 
-        sigma_x  = F.avg_pool2d(x ** 2, kernel_size=3, stride=1) - mu_x ** 2
-        sigma_y  = F.avg_pool2d(y ** 2, kernel_size=3, stride=1) - mu_y ** 2
-        sigma_xy = F.avg_pool2d(x ** 2, kernel_size=3, stride=1) - mu_x * mu_y
-
-        # sigma_x  = slim.avg_pool2d(x ** 2, 3, 1, 'VALID') - mu_x ** 2
-        # sigma_y  = slim.avg_pool2d(y ** 2, 3, 1, 'VALID') - mu_y ** 2
-        # sigma_xy = slim.avg_pool2d(x * y , 3, 1, 'VALID') - mu_x * mu_y
-
-        SSIM_n = (2 * mu_x * mu_y + C1) * (2 * sigma_xy + C2)
-        SSIM_d = (mu_x ** 2 + mu_y ** 2 + C1) * (sigma_x + sigma_y + C2)
-
-        loss_SSIM = SSIM_n / SSIM_d
-
-        #return tf.clip_by_value((1 - SSIM) / 2, 0, 1)
-        return (1 - loss_SSIM) / 2
