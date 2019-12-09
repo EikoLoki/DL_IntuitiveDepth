@@ -15,7 +15,7 @@ def augment_scared(strength=0.5):
     :param strength: a number between 0 and 1. scales down the probability of transformation applied.
     :return: transformer
     """
-    targets = {'left': 'image', 'right': 'image'}
+    targets = {'right': 'image'}
     transformations = [a.MotionBlur(p=0.5 * strength),
                        a.RandomBrightnessContrast(p=1 * strength),
                        a.RandomGamma(p=0.5 * strength),

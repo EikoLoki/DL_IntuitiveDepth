@@ -1,10 +1,12 @@
-from PIL import Image
+import imageio
 import torch.utils.data as data
-import torchvision.transforms as transforms
+import torchvision
+
 import utils.camera_config as cam_config
+from dataloader.preprocess import augment_scared
 
 def image_loader(file):
-    return Image.open(file).convert('RGB')
+    return imageio.imread(file)
 
 def camera_config_loader(file):
     cam_para = cam_config.CameraPara(file)
@@ -19,6 +21,7 @@ class SCARED_loader(data.Dataset):
         self.img_loader = imgloader
         self.para_loader = paraloader
         self.training = training
+        self.augmentation_transform = augment_scared()
 
     def __getitem__(self, index):
         left_file = self.left[index]
@@ -29,18 +32,12 @@ class SCARED_loader(data.Dataset):
         right_img = self.img_loader(right_file)
         para = self.para_loader(para_file)
 
-        # TODO: use preprosssing function here
         if self.training:
-            preprocess = transforms.Compose([
-                transforms.ToTensor()])
+            left, right = self.augmentation_transform(image=left_img, right=right_img).values()
         else:
-            # no preprocess, just toTensor here
-            preprocess = transforms.Compose([
-                transforms.ToTensor()])
-
-
-        left = preprocess(left_img)
-        right = preprocess(right_img)
+            left, right = left_img, right_img
+        left = torchvision.transforms.functional.to_tensor(left)
+        right = torchvision.transforms.functional.to_tensor(right)
         para_dict = {
             'left_intrinsic': para.l_camera_intrin,
             'right_intrinsic': para.r_camera_intrin,
