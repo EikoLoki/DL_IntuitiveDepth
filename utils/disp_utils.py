@@ -154,7 +154,6 @@ def consistent_lr(left_disp, right_disp, left_grid = None):
     
     return left_disp_recons.squeeze() - left_disp
 
-<<<<<<< HEAD
 def depth_to_disp(depthL, depthR, camera_para):
     """
     Args:
@@ -179,9 +178,6 @@ def depth_to_disp(depthL, depthR, camera_para):
 
 
 def load_exmaple(img_dir, disp_dir, num_ins):
-=======
-def load_exmaple(img_dir, disp_dir, num_ins, use_gpu=True):
->>>>>>> dev_pengfei
 
     if use_gpu and torch.cuda.is_available():
         device = torch.device('cuda:0')

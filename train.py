@@ -6,6 +6,7 @@ import argparse
 import torch
 import torch.nn as nn
 from torch.autograd import Variable
+from torch.utils.tensorboard import SummaryWriter
 
 import dataloader.listfile as lf
 import dataloader.loader as ld
@@ -95,4 +96,14 @@ def train(imgL, imgR, camera_para, model, optimizer):
     optimizer.step()
 
 
-    
+
+
+def main():
+    start_epoch = pasued_epoch
+    total_epochs = args.epochs
+    print('Start training ...')
+
+    for epoch in range(start_epoch, total_epochs):
+        #-----------------Training---------------
+        print('\nEPOCH ' + str(epoch + 1) + 'of ' + str(total_epoch) + '\n')
+        
