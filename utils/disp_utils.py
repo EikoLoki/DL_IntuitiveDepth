@@ -169,7 +169,7 @@ def load_exmaple(img_dir, disp_dir, num_ins, use_gpu=True):
     right_disp = np.empty([num_ins, h, w], dtype=np.float32)
 
     for i in range(num_ins):
-        indx = 0
+        indx = i
         disp_l, _ = readPFM( join(disp_dir, "left/frame_data{:>06}.pfm".format(indx)) )
         disp_r, _ = readPFM( join(disp_dir, "right/frame_data{:>06}.pfm".format(indx)) )
 

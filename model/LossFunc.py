@@ -62,14 +62,13 @@ if __name__ == "__main__":
 
     disp_dir = "data/disp"
     img_dir = "data/sample"
-    num_ins = 10
+    num_ins = 5
     right_data, left_data, left_disp, right_disp = load_exmaple(img_dir, disp_dir, num_ins, use_gpu=True)
 
     loss = Loss_reonstruct()
     for i in range(5):
-        start = time.process_time()
+        #start = time.process_time()
         left_l1, right_l1 , lr_l1 = loss(left_data, right_data, left_disp, right_disp)
-        overall_loss = left_l1 + right_l1 + lr_l1
-        print(time.process_time() - start)
+        overall_loss = 0.5*left_l1 + 0.5*right_l1  + 1.0*lr_l1
+        print(overall_loss)
         overall_loss.backward()
-        print("OK")
