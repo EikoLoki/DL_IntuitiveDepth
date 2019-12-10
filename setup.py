@@ -1,6 +1,6 @@
 '''
 *******************************************************
- * Copyright (C) 2010-2011 Pengfei Li, Xiran Zhang
+ * Copyright (C) 2019-2020 Pengfei Li, Xiran Zhang
  * 
  * This file is part of Deep learning for Mono depth estimation
  * 
