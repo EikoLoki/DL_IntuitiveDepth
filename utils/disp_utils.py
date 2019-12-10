@@ -76,15 +76,15 @@ def SSIM(x, y, ksize = 3):
     sigma_y  = F.avg_pool2d(y * y, kernel_size=ksize, stride=1, padding=ps) - mu_y.pow(2)
     sigma_xy = F.avg_pool2d(x * x, kernel_size=ksize, stride=1, padding=ps) - mu_x * mu_y
 
-    SSIM_n = (2 * mu_x * mu_y + C1) * (2 * sigma_xy + C2)
     SSIM_d = ((mu_x * mu_x + mu_y * mu_y) + C1) * (sigma_x + sigma_y + C2)
-
+    #del sigma_x, sigma_y
+    SSIM_n = (2 * mu_x * mu_y + C1) * (2 * sigma_xy + C2)
+    #del sigma_xy
     loss_SSIM = SSIM_n / SSIM_d
 
-    #return tf.clip_by_value((1 - SSIM) / 2, 0, 1)
     return (1 - loss_SSIM) / 2
 
-def reconstruct_left(right_data, left_disp):
+def reconstruct_left(right_data, left_disp, left_grid=None):
     '''
     Args:
         right data [N, C, H, W]
@@ -94,19 +94,18 @@ def reconstruct_left(right_data, left_disp):
     '''
     n, _, h, w = right_data.shape
     device = right_data.device
+    data_type = right_data.dtype
+    if left_grid is None:
+        grid_u, grid_v = torch.meshgrid(torch.arange(-1, 1, 2/h, dtype=data_type), torch.arange(-1,1,2/w, dtype=data_type))
+        left_grid = torch.cat([grid_v.repeat([n,1,1]).unsqueeze(3), grid_u.repeat([n,1,1]).unsqueeze(3)], 3).to(device).requires_grad_(False)
+    
+    grid_sample = left_grid + torch.cat([-2*left_disp.unsqueeze(-1)/w , torch.zeros(n,h,w,1, device=device, dtype=data_type)], 3)
 
-    grid_u, grid_v = torch.meshgrid(torch.arange(-1, 1, 2/h, dtype=torch.double), torch.arange(-1,1,2/w, dtype=torch.double))
-    left_grid = torch.empty(n, h, w, 2, dtype= torch.double, device=device)
-    
-    left_grid[:,:,:,1] = grid_u.repeat([n,1,1])
-    left_grid[:,:,:,0] = grid_v.repeat([n,1,1])
-    left_grid[:,:,:,0] -= 2*left_disp/w 
-    
-    left_recons = F.grid_sample(right_data, left_grid, mode='bilinear', padding_mode='zeros')
+    left_recons = F.grid_sample(right_data, grid_sample, mode='bilinear', padding_mode='zeros')
 
     return left_recons
 
-def reconstruct_right(left_data, right_disp):
+def reconstruct_right(left_data, right_disp, right_grid=None):
     '''
     Args:
         left data [N, C, H, W]
@@ -114,21 +113,22 @@ def reconstruct_right(left_data, right_disp):
     Return:
         right_recons [N, C, H, W]
     '''
+    #assert 0
     n, _, h, w = left_data.shape
     device = left_data.device
+    data_type = left_data.dtype
 
-    grid_u, grid_v = torch.meshgrid(torch.arange(-1, 1, 2/h, dtype=torch.double), torch.arange(-1,1,2/w, dtype=torch.double))
-    right_grid = torch.empty(n, h, w, 2, dtype= torch.double, device=device)
+    if right_grid is None:
+        grid_u, grid_v = torch.meshgrid(torch.arange(-1, 1, 2/h, dtype=data_type), torch.arange(-1,1,2/w, dtype=data_type))
+        right_grid = torch.cat([grid_v.repeat([n,1,1]).unsqueeze(3), grid_u.repeat([n,1,1]).unsqueeze(3)], 3).to(device).requires_grad_(False)
     
-    right_grid[:,:,:,1] = grid_u.repeat([n,1,1])
-    right_grid[:,:,:,0] = grid_v.repeat([n,1,1])
-    right_grid[:,:,:,0] += 2*right_disp/w 
+    grid_sample = right_grid + torch.cat([ 2*right_disp.unsqueeze(-1)/w , torch.zeros(n,h,w,1, device=device, dtype=data_type)], 3)
     
-    right_recons = F.grid_sample(left_data, right_grid, mode='bilinear', padding_mode='zeros')
+    right_recons = F.grid_sample(left_data, grid_sample, mode='bilinear', padding_mode='zeros')
 
     return right_recons
 
-def consistent_lr(left_disp, right_disp):
+def consistent_lr(left_disp, right_disp, left_grid = None):
     '''
     Args:
         left_disp [N, H, W]
@@ -139,33 +139,34 @@ def consistent_lr(left_disp, right_disp):
 
     n, h, w = left_disp.shape
     device = left_disp.device
+    data_type = left_disp.dtype
 
-    grid_u, grid_v = torch.meshgrid(torch.arange(-1, 1, 2/h, dtype=torch.double), torch.arange(-1,1,2/w, dtype=torch.double))
-
-    left_grid = torch.empty(n, h, w, 2, dtype= torch.double, device=device)
+    if left_grid is None:
+        grid_u, grid_v = torch.meshgrid(torch.arange(-1, 1, 2/h, dtype=data_type), torch.arange(-1,1,2/w, dtype=data_type))
+        left_grid = torch.cat([grid_v.repeat([n,1,1]).unsqueeze(3), grid_u.repeat([n,1,1]).unsqueeze(3)], 3).to(device).requires_grad_(False)
     
-    left_grid[:,:,:,1] = grid_u.repeat([n,1,1])
-    left_grid[:,:,:,0] = grid_v.repeat([n,1,1])
-    left_grid[:,:,:,0] -= 2*left_disp/w 
+    # left_grid[:,:,:,1] = grid_u.repeat([n,1,1])
+    # left_grid[:,:,:,0] = grid_v.repeat([n,1,1])
+    # left_grid[:,:,:,0] -= 2*left_disp/w 
+    grid_sample = left_grid + torch.cat([-2*left_disp.unsqueeze(-1)/w, torch.zeros(n,h,w,1, device=device, dtype=data_type)], 3)
     
-    right_disp_sample = right_disp.unsqueeze(1)
-    left_disp_recons = F.grid_sample(right_disp_sample, left_grid, mode='bilinear', padding_mode='zeros')
+    left_disp_recons = F.grid_sample(right_disp.unsqueeze(1), grid_sample, mode='bilinear', padding_mode='zeros')
     
     return left_disp_recons.squeeze() - left_disp
 
-def load_exmaple(img_dir, disp_dir, num_ins):
+def load_exmaple(img_dir, disp_dir, num_ins, use_gpu=True):
 
-    if torch.cuda.is_available():
+    if use_gpu and torch.cuda.is_available():
         device = torch.device('cuda:0')
     else:
         device = torch.device('cpu')
 
     disp_l, scale = readPFM( join(disp_dir, "left/frame_data{:>06}.pfm".format(0)) )
     h, w = disp_l.shape
-    right_data = torch.empty(num_ins, 3, h, w, dtype=torch.double, device = device)
-    left_data = torch.empty(num_ins, 3, h, w, dtype=torch.double, device = device)
-    left_disp = torch.empty(num_ins, h, w, dtype=torch.double, device = device)
-    right_disp = torch.empty(num_ins, h, w, dtype=torch.double, device = device)
+    right_data = np.empty([num_ins, 3, h, w], dtype=np.float32)
+    left_data  = np.empty([num_ins, 3, h, w], dtype=np.float32)
+    left_disp  = np.empty([num_ins, h, w], dtype=np.float32)
+    right_disp = np.empty([num_ins, h, w], dtype=np.float32)
 
     for i in range(num_ins):
         indx = 0
@@ -177,18 +178,25 @@ def load_exmaple(img_dir, disp_dir, num_ins):
         img_right = cv2.imread(join(img_dir, "right_finalpass/frame_data{:>06}.png".format(indx)) )[:,:,::-1]
 
         #visualize(img_left, img_right, disp_r)
-        right_data[i, :, :, :] = torch.from_numpy(np.transpose(img_right/255.0,(2,0,1)))
-        left_data[i, :, :, :] = torch.from_numpy(np.transpose(img_left/255.0,(2,0,1)))
-        left_disp[i, :, :] = torch.from_numpy(disp_l)
-        right_disp[i, :, :] = torch.from_numpy(disp_r)
-    return right_data, left_data, left_disp, right_disp
+        right_data[i, :, :, :] = np.transpose(img_right/255.0,(2,0,1))
+        left_data[i, :, :, :] = np.transpose(img_left/255.0,(2,0,1))
+        right_disp[i, :, :] = disp_r
+        left_disp[i, :, :] = disp_l
+        
+
+    right_img = torch.from_numpy(right_data).to(device).requires_grad_()
+    left_img = torch.from_numpy(left_data).to(device).requires_grad_()
+    right_disp_gd = torch.from_numpy(right_disp).to(device).requires_grad_()
+    left_disp_gd = torch.from_numpy(left_disp).to(device).requires_grad_()
+
+    return right_img, left_img, right_disp_gd, left_disp_gd
 
 
 if __name__ == "__main__":
     
     disp_dir = "data/disp"
     img_dir = "data/sample"
-    num_ins = 100
+    num_ins = 4
 
     right_data, left_data, left_disp, right_disp = load_exmaple(img_dir, disp_dir, num_ins)
 
