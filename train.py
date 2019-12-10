@@ -5,10 +5,13 @@
 import argparse
 import torch
 import torch.nn as nn
+from torch.autograd import Variable
 
 import dataloader.listfile as lf
 import dataloader.loader as ld
+from model import LossFunc
 from model import *
+from utils import disp_utils
 
 parser = argparse.ArgumentParser(description='SPAutoED')
 parser.add_argument('--datapath', default='/media/xiran_zhang/2011_HD7/EndoVis_SCARED')
@@ -52,3 +55,44 @@ if cuda:
     model = nn.DataParallel()
     model.cuda()
 pasued_epoch = 0
+
+if args.loadmodel is not None:
+    state_dict = torch.load(args.loadmodel)
+    model.load_state_dict(state_dict['state_dict'])
+    pasued_epoch = state_dict['epoch']
+    max_epo_load = state_dict['max_epo']
+    max_acc_load = state_dict['max_acc']
+
+print('Number of model parameters: {}'.format(sum([p.data.nelement() for p in model.parameters()])))
+
+# set criteria, optimizer and scheduler
+# Option can be made here:
+# optimizer: Adam, SGD
+criteria = model.Loss_reconstruct()
+optimizer = torch.optim.Adam(model.parameters(), lr = 10e-3)
+scheduler = torch.optim.lr_scheduler.StepLR(optimizer, 10, 0.7)
+
+# train function / validation function / test function
+def train(imgL, imgR, camera_para, model, optimizer):
+    model.train()
+    if cuda:
+        imgL = imgL.cuda()
+        imgR = imgR.cuda()
+
+    optimizer.zero_grad()
+
+    depthL = model(imgL)
+    depthR = model(imgR)
+
+    # depth to disparity
+    dispL, dispR = depth_to_disp(depthL, depthR, camera_para)
+
+    right_l1, left_l1, lr_l1 = criteria(imgL, imgR, dispL, dispR)
+
+    loss = 0.5*right_l1 + 0.5*left_l1 + 1.0 * lr_l1
+
+    loss.backward()
+    optimizer.step()
+
+
+    

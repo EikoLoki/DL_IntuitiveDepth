@@ -32,7 +32,7 @@ class Loss_reonstruct(nn.Module):
         left_l1 = torch.abs(res_loss_l).mean()
         lr_l1 = torch.abs(loss_lr).mean()
 
-        return right_l1 + left_l1 + lr_l1
+        return right_l1, left_l1, lr_l1
 
 if __name__ == "__main__":
     from utils.disp_utils import load_exmaple

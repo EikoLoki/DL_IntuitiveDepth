@@ -153,6 +153,29 @@ def consistent_lr(left_disp, right_disp):
     
     return left_disp_recons.squeeze() - left_disp
 
+def depth_to_disp(depthL, depthR, camera_para):
+    """
+    Args:
+        depthL, depthR(torch.Tensor): depth map for Left view and Right view
+        camera_para(dict): camera parameters for left and right.
+    Returns:
+        dispL, dispR: disparity of left view and right view
+    """
+    l_intrinsic = torch.tensor(camera_para['left_intrinsic'])
+    r_intrinsic = torch.tensor(camera_para['right_intrinsic'])
+    translation = torch.tensor(camera_para['translation'])
+    
+    l_f = (l_intrinsic[0,0]+l_intrinsic[1,1])/2
+    r_f = (r_intrinsic[0,0]+r_intrinsic[1,1])/2
+    bl = torch.abs(translation[0,0])
+
+    dispL = l_f * bl / depthL
+    dispR = r_f * bl / depthR
+
+    return dispL, dispR
+
+
+
 def load_exmaple(img_dir, disp_dir, num_ins):
 
     if torch.cuda.is_available():
