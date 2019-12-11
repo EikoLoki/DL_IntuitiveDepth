@@ -31,7 +31,7 @@ class SCARED_loader(data.Dataset):
         para = self.para_loader(para_file)
 
         w, h = left_img.size
-        tw, th = 1280, 1024
+        tw, th = 512, 128
         x1 = random.randint(0, w - tw)
         y1 = random.randint(0, h - th)
 

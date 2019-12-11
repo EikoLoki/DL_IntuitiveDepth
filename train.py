@@ -22,7 +22,7 @@ from utils.disp_utils import depth_to_disp
 parser = argparse.ArgumentParser(description='SPAutoED')
 parser.add_argument('--datapath', default='/media/xiran_zhang/2011_HDD7/EndoVis_SCARED')
 parser.add_argument('--epochs', type=int, default=100)
-parser.add_argument('--loadmodel', default='./trained_model/SPAutoED_1.tar', help='path to the trained model, for continuous training')
+parser.add_argument('--loadmodel', default='./trained_model/SPAutoED_2.tar', help='path to the trained model, for continuous training')
 parser.add_argument('--savemodel', default='./trained_model/', help='folder to the save the trained model')
 parser.add_argument('--seed', type=int, default=1, metavar='S', help='seed for random (default:1)')
 
@@ -45,15 +45,15 @@ train_left_img, train_right_img, train_cam_para,\
     
 trainImgLoader = torch.utils.data.DataLoader(
     ld.SCARED_loader(train_left_img, train_right_img, train_cam_para, training=True),
-    batch_size=1, shuffle=True, num_workers=5, drop_last=False
+    batch_size=15, shuffle=True, num_workers=5, drop_last=False
     )
 valImgLoader = torch.utils.data.DataLoader(
     ld.SCARED_loader(val_left_img, val_right_img, val_cam_para, training=False),
-    batch_size=1, shuffle=False, num_workers=5, drop_last=False
+    batch_size=15, shuffle=False, num_workers=5, drop_last=False
 )
 testImgLoader = torch.utils.data.DataLoader(
     ld.SCARED_loader(test_left_img, test_right_img, test_cam_para, training=False),
-    batch_size=1, shuffle=False, num_workers=5, drop_last=False
+    batch_size=15, shuffle=False, num_workers=5, drop_last=False
 )
 
 # create model
@@ -63,15 +63,6 @@ if cuda:
     model = model.cuda()
 pasued_epoch = 0
 
-# load model
-if args.loadmodel is not None:
-    state_dict = torch.load(args.loadmodel)
-    model.load_state_dict(state_dict['state_dict'])
-    pasued_epoch = state_dict['epoch']
-    train_loss = state_dict['train_loss']
-    val_loss = state_dict['val_loss']
-
-print('Number of model parameters: {}'.format(sum([p.data.nelement() for p in model.parameters()])))
 
 # set criteria, optimizer and scheduler
 # Option can be made here:
@@ -80,14 +71,28 @@ criteria = LossFunc.Loss_reonstruct()
 optimizer = torch.optim.Adam(model.parameters(), lr = 10e-3)
 scheduler = torch.optim.lr_scheduler.StepLR(optimizer, 10, 0.7)
 
+# load model
+if args.loadmodel is not None:
+    state_dict = torch.load(args.loadmodel)
+    model.load_state_dict(state_dict['state_dict'])
+    pasued_epoch = state_dict['epoch']
+    train_loss = state_dict['train_loss']
+    val_loss = state_dict['val_loss']
+    scheduler = state_dict['scheduler']
+    optimizer = state_dict['optimizer']
+    
+
+print('Number of model parameters: {}'.format(sum([p.data.nelement() for p in model.parameters()])))
+
+
 # train function / validation function / test function
 def train(imgL, imgR, camera_para, model, optimizer):
     model.train()
 
-    plt.imshow(imgL[0,0])
-    plt.show()
-    plt.imshow(imgR[0,0])
-    plt.show()
+    # plt.imshow(imgL[0,0])
+    # plt.show()
+    # plt.imshow(imgR[0,0])
+    # plt.show()
 
     if cuda:
         imgL = imgL.cuda()
@@ -100,18 +105,19 @@ def train(imgL, imgR, camera_para, model, optimizer):
     dispL, dispR = depth_to_disp(depthL, depthR, camera_para)
     
     # visualize
-    depthL_cpu = depthL.cpu()
-    depthR_cpu = depthR.cpu()
-    depthL_cpu.detach_()
-    depthR_cpu.detach_()
-    plt.imshow(depthL_cpu[0,0])
-    plt.show()
-    plt.imshow(depthR_cpu[0,0])
-    plt.show()
+    # depthL_cpu = depthL.cpu()
+    # depthR_cpu = depthR.cpu()
+    # depthL_cpu.detach_()
+    # depthR_cpu.detach_()
+    # plt.imshow(depthL_cpu[0,0])
+    # plt.show()
+    # plt.imshow(depthR_cpu[0,0])
+    # plt.show()
 
 
-    right_l1, left_l1, lr_l1 = criteria(imgL, imgR, dispL, dispR)
-    loss = 0.5*right_l1 + 0.5*left_l1 + 1.0 * lr_l1 
+    left_l1, right_l1, lr_l1 = criteria(imgL, imgR, dispL, dispR)
+    # print('left recons loss:', right_l1.data.item(), 'right recons loss:', left_l1.data.item(), 'lr consis loss:', lr_l1.data.item())
+    loss = 0.7*left_l1 + 0.7*right_l1 + 1.0 * lr_l1 
     # torch.autograd.set_detect_anomaly(True)
     loss.backward()
     optimizer.step()
@@ -142,7 +148,7 @@ def val(imgL, imgR, camera_para, model, optimizer, epoch):
 
 
 def main():
-    start_epoch = pasued_epoch
+    start_epoch = pasued_epoch+1
     total_epochs = args.epochs
     print('Start training ...')
 
@@ -185,7 +191,12 @@ def main():
             'state_dict': model.state_dict(),
             'train_loss':epoch_train_loss,
             'val_loss':epoch_val_loss,
+            'optimizer':optimizer,
+            'scheduler':scheduler
         }, savefilename)
+
+        scheduler.step()
+        lr = scheduler.get_lr()
 
     writer.close()
 

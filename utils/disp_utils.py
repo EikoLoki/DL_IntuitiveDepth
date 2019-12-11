@@ -61,7 +61,7 @@ def visualize(img_left, img_right, data):
     axes[0].imshow(img_left)
     axes[1].imshow(img_right)
     axes[2].imshow((data+1e-4), cmap="plasma")
-    fig.show()
+    plt.show()
     input("Any key to continue")
     print("OK")
 
@@ -173,8 +173,8 @@ def depth_to_disp(depthL, depthR, camera_para):
     # print('depth size:', depthL.size())
     # print('left focal length size:', l_f.size())
 
-    dispL = l_f * bl / (depthL + 20.0)
-    dispR = r_f * bl / (depthR + 20.0)
+    dispL = l_f * bl / (depthL + 0.01)
+    dispR = r_f * bl / (depthR + 0.01)
 
     dispL = dispL.squeeze(1).type(torch.float32)
     dispR = dispR.squeeze(1).type(torch.float32)

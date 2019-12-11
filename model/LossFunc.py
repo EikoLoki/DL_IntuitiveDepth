@@ -4,7 +4,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from utils.disp_utils import reconstruct_left, reconstruct_right, SSIM, consistent_lr
+from utils.disp_utils import reconstruct_left, reconstruct_right, SSIM, consistent_lr, visualize
 
 class Loss_reonstruct(nn.Module):
     def __init__(self, n=4, h=1024, w=1280, default_device="cuda:0"):
@@ -47,12 +47,22 @@ class Loss_reonstruct(nn.Module):
         left_recons = reconstruct_left(right_data, left_disp, left_grid=self.base_grid)
         right_recons = reconstruct_right(left_data, right_disp)
 
-        res_loss_l = SSIM(left_recons, left_data)
-        res_loss_r = SSIM(right_recons, right_data)
+        # left_recons_cpu = left_recons.cpu()
+        # left_data_cpu = left_data.cpu()
+        # left_disp_cpu = left_disp.cpu()
+        # left_recons_cpu.detach_()
+        # left_data_cpu.detach_()
+        # left_disp_cpu.detach_()
+        # visualize(left_data_cpu[0,0], left_recons_cpu[0,0], left_disp_cpu[0])
+
+        # res_loss_l = SSIM(left_recons, left_data)
+        # res_loss_r = SSIM(right_recons, right_data)
+        left_l1 = F.smooth_l1_loss(left_recons, left_data)
+        right_l1 = F.smooth_l1_loss(right_recons, right_data)
         loss_lr = consistent_lr(left_disp, right_disp, left_grid=self.base_grid)
 
-        left_l1 = torch.abs(res_loss_l).mean()
-        right_l1 = torch.abs(res_loss_r).mean()
+        # left_l1 = torch.abs(res_loss_l).mean()
+        # right_l1 = torch.abs(res_loss_r).mean()
         lr_l1 = torch.abs(loss_lr).mean()
 
         return left_l1, right_l1 , lr_l1
