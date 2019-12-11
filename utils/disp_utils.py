@@ -82,7 +82,8 @@ def SSIM(x, y, ksize = 3):
     #del sigma_xy
     loss_SSIM = SSIM_n / SSIM_d
 
-    return (1 - loss_SSIM) / 2
+    return torch.clamp((1 - loss_SSIM) / 2, 0, 1)
+    
 
 def reconstruct_left(right_data, left_disp, left_grid=None):
     '''
