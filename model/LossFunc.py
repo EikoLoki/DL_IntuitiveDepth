@@ -17,6 +17,34 @@ class Loss_reonstruct(nn.Module):
         grid_u, grid_v = torch.meshgrid(torch.arange(-1, 1, 2/h, dtype=self.data_type), torch.arange(-1,1,2/w, dtype=self.data_type))
         self.base_grid = torch.cat([grid_v.repeat([n,1,1]).unsqueeze(3), grid_u.repeat([n,1,1]).unsqueeze(3)], 3).to(self.device).requires_grad_(False)
 
+    def gradient_x(self, img):
+
+        # Pad input to keep output size consistent
+        if len(img.shape) == 4:
+            img = F.pad(img (0, 1, 0, 0), mode="replicate")
+        elif len(img.shape) == 3:
+            img = F.pad(img.unsqueeze(1), (0, 1, 0, 0), mode="replicate")
+        
+        gx = img[:, :, :, :-1] - img[:, :, :, 1:]  # NCHW
+        return gx
+
+    def gradient_y(self, img):
+
+        # Pad input to keep output size consistent
+        if len(img.shape) == 4:
+            img = F.pad(img (0, 0, 0, 1), mode="replicate")
+        elif len(img.shape) == 3:
+            img = F.pad(img.unsqueeze(1), (0, 0, 0, 1), mode="replicate")
+        
+        gy = img[:, :, :-1, :] - img[:, :, 1:, :]  # NCHW
+        return gy
+
+    def smoothness_term(self, img_data):
+
+        gx = self.gradient_x(img_data)
+        gy = self.gradient_y(img_data)
+
+        return torch.abs(gx) + torch.abs(gy)
 
     def forward(self, left_data, right_data, left_disp, right_disp):
         '''
@@ -43,9 +71,10 @@ class Loss_reonstruct(nn.Module):
         if self.data_type != data_type or self.device != device:
             self.base_grid = self.base_grid.type(data_type).to(device)
             self.data_type, self.device = data_type, device
-
+        
         left_recons = reconstruct_left(right_data, left_disp, left_grid=self.base_grid)
         right_recons = reconstruct_right(left_data, right_disp)
+
 
         # left_recons_cpu = left_recons.cpu()
         # left_data_cpu = left_data.cpu()
@@ -55,17 +84,19 @@ class Loss_reonstruct(nn.Module):
         # left_disp_cpu.detach_()
         # visualize(left_data_cpu[0,0], left_recons_cpu[0,0], left_disp_cpu[0])
 
-        # res_loss_l = SSIM(left_recons, left_data)
-        # res_loss_r = SSIM(right_recons, right_data)
-        left_l1 = F.smooth_l1_loss(left_recons, left_data)
-        right_l1 = F.smooth_l1_loss(right_recons, right_data)
-        loss_lr = consistent_lr(left_disp, right_disp, left_grid=self.base_grid)
+        res_loss_l = SSIM(left_recons, left_data)
+        left_l1 = torch.abs(res_loss_l).mean()
 
-        # left_l1 = torch.abs(res_loss_l).mean()
-        # right_l1 = torch.abs(res_loss_r).mean()
+        res_loss_r = SSIM(right_recons, right_data)
+        right_l1 = torch.abs(res_loss_r).mean()
+
+        loss_lr = consistent_lr(left_disp, right_disp, left_grid=self.base_grid)
         lr_l1 = torch.abs(loss_lr).mean()
 
-        return left_l1, right_l1 , lr_l1
+        left_smooth  = self.smoothness_term(left_disp).mean()
+        right_smooth = self.smoothness_term(right_disp).mean()
+
+        return left_l1, right_l1 , lr_l1, left_smooth, right_smooth
 
 if __name__ == "__main__":
     from utils.disp_utils import load_exmaple
@@ -74,13 +105,15 @@ if __name__ == "__main__":
 
     disp_dir = "data/disp"
     img_dir = "data/sample"
-    num_ins = 5
+    num_ins = 4
     right_data, left_data, left_disp, right_disp = load_exmaple(img_dir, disp_dir, num_ins, use_gpu=True)
 
     loss = Loss_reonstruct()
     for i in range(5):
         #start = time.process_time()
-        left_l1, right_l1 , lr_l1 = loss(left_data, right_data, left_disp, right_disp)
-        overall_loss = 0.5*left_l1 + 0.5*right_l1  + 1.0*lr_l1
+        left_l1, right_l1 , lr_l1, left_smooth, right_smooth = loss(left_data, right_data, left_disp, right_disp)
+        overall_loss = 0.5*left_l1 + 0.5*right_l1  + 1.0*lr_l1 + 0.5*left_smooth + 0.5*right_smooth
         print(overall_loss)
         overall_loss.backward()
+        #print(overall_loss.grad)
+        #print(left_data.grad)
