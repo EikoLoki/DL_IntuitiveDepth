@@ -1,11 +1,11 @@
 # Author: Pengfei Li
 # customed loss function, extension of torch.Module
-# Author: Pengfei Li
-# customed loss function, extension of torch.Module
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from utils.disp_utils import reconstruct_left, reconstruct_right, SSIM, consistent_lr
+
 class Loss_reonstruct(nn.Module):
     def __init__(self, n=4, h=1024, w=1280, default_device="cuda:0"):
         
@@ -33,6 +33,8 @@ class Loss_reonstruct(nn.Module):
         n, h, w = right_disp.shape
         data_type = right_disp.dtype
         device = right_data.device
+        # print('dtype:', data_type)
+        # print('device:', device)
         
         if n != self.n or w != self.w or h != self.h:
             grid_u, grid_v = torch.meshgrid(torch.arange(-1, 1, 2/h, dtype=data_type), torch.arange(-1,1,2/w, dtype=data_type))

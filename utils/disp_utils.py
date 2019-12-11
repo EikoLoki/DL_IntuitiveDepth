@@ -6,6 +6,7 @@ import os
 from os.path import join 
 import torch
 import torch.nn.functional as F
+from torch.autograd import Variable 
 
 import time
 
@@ -64,7 +65,7 @@ def visualize(img_left, img_right, data):
     input("Any key to continue")
     print("OK")
 
-def SSIM(x, y, ksize = 3):
+def SSIM(x, y, ksize = 5):
     
     C1 = 0.01 ** 2
     C2 = 0.03 ** 2
@@ -165,14 +166,20 @@ def depth_to_disp(depthL, depthR, camera_para):
     l_intrinsic = torch.tensor(camera_para['left_intrinsic'])
     r_intrinsic = torch.tensor(camera_para['right_intrinsic'])
     translation = torch.tensor(camera_para['translation'])
-    
-    l_f = (l_intrinsic[0,0]+l_intrinsic[1,1])/2
-    r_f = (r_intrinsic[0,0]+r_intrinsic[1,1])/2
-    bl = torch.abs(translation[0,0])
 
-    dispL = l_f * bl / depthL
-    dispR = r_f * bl / depthR
+    l_f = ((l_intrinsic[:,0,0]+l_intrinsic[:,1,1])/2).view(-1,1,1,1).cuda()
+    r_f = ((r_intrinsic[:,0,0]+r_intrinsic[:,1,1])/2).view(-1,1,1,1).cuda()
+    bl = torch.abs(translation[:,0,0]).view(-1,1,1,1).cuda()
+    # print('depth size:', depthL.size())
+    # print('left focal length size:', l_f.size())
 
+    dispL = l_f * bl / (depthL + 20.0)
+    dispR = r_f * bl / (depthR + 20.0)
+
+    dispL = dispL.squeeze(1).type(torch.float32)
+    dispR = dispR.squeeze(1).type(torch.float32)
+    dispL.requires_grad_ = True
+    dispR.requires_grad_ = True
     return dispL, dispR
 
 

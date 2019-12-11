@@ -1,4 +1,5 @@
 from PIL import Image
+import random
 import torch.utils.data as data
 import torchvision.transforms as transforms
 import utils.camera_config as cam_config
@@ -29,7 +30,14 @@ class SCARED_loader(data.Dataset):
         right_img = self.img_loader(right_file)
         para = self.para_loader(para_file)
 
-        # TODO: use preprosssing function here
+        w, h = left_img.size
+        tw, th = 1280, 1024
+        x1 = random.randint(0, w - tw)
+        y1 = random.randint(0, h - th)
+
+        left_img = left_img.crop((x1, y1, x1+tw, y1+th))
+        right_img = right_img.crop((x1, y1, x1+tw, y1+th))
+
         if self.training:
             preprocess = transforms.Compose([
                 transforms.ToTensor()])
