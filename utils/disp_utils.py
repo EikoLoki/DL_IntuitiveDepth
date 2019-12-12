@@ -156,6 +156,33 @@ def consistent_lr(left_disp, right_disp, left_grid = None):
     
     return left_disp_recons.squeeze() - left_disp
 
+def consistent_rl(left_disp, right_disp, right_grid = None):
+    '''
+    Args:
+        left_disp [N, H, W]
+        right_disp [N, H, W]
+    Return:
+        lr_loss [N, H, W]
+    '''
+
+    n, h, w = left_disp.shape
+    device = left_disp.device
+    data_type = left_disp.dtype
+
+    if right_grid is None:
+        grid_u, grid_v = torch.meshgrid(torch.arange(-1, 1, 2/h, dtype=data_type), torch.arange(-1,1,2/w, dtype=data_type))
+        right_grid = torch.cat([grid_v.repeat([n,1,1]).unsqueeze(3), grid_u.repeat([n,1,1]).unsqueeze(3)], 3).to(device).requires_grad_(False)
+    
+    # left_grid[:,:,:,1] = grid_u.repeat([n,1,1])
+    # left_grid[:,:,:,0] = grid_v.repeat([n,1,1])
+    # left_grid[:,:,:,0] -= 2*left_disp/w 
+    grid_sample = right_grid + torch.cat([2*right_disp.unsqueeze(-1)/w, torch.zeros(n,h,w,1, device=device, dtype=data_type)], 3)
+    
+    right_disp_recons = F.grid_sample(left_disp.unsqueeze(1), grid_sample, mode='bilinear', padding_mode='zeros')
+    
+    return right_disp_recons.squeeze() - right_disp
+
+
 def depth_to_disp(depthL, depthR, camera_para):
     """
     Args:

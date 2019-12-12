@@ -4,7 +4,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from utils.disp_utils import reconstruct_left, reconstruct_right, SSIM, consistent_lr, visualize
+from utils.disp_utils import reconstruct_left, reconstruct_right, SSIM, consistent_lr, consistent_rl, visualize
 
 class Loss_reonstruct(nn.Module):
     def __init__(self, n=4, h=1024, w=1280, default_device="cuda:0"):
@@ -75,7 +75,7 @@ class Loss_reonstruct(nn.Module):
         left_recons = reconstruct_left(right_data, left_disp, left_grid=self.base_grid)
         right_recons = reconstruct_right(left_data, right_disp)
 
-
+        # visualization
         # left_recons_cpu = left_recons.cpu()
         # left_data_cpu = left_data.cpu()
         # left_disp_cpu = left_disp.cpu()
@@ -89,14 +89,15 @@ class Loss_reonstruct(nn.Module):
 
         res_loss_r = SSIM(right_recons, right_data)
         right_l1 = torch.abs(res_loss_r).mean()
-
         loss_lr = consistent_lr(left_disp, right_disp, left_grid=self.base_grid)
+        loss_rl = consistent_rl(left_disp, right_disp, right_grid=self.base_grid)
         lr_l1 = torch.abs(loss_lr).mean()
+        rl_l1 = torch.abs(loss_rl).mean()
 
         left_smooth  = self.smoothness_term(left_disp).mean()
         right_smooth = self.smoothness_term(right_disp).mean()
 
-        return left_l1, right_l1 , lr_l1, left_smooth, right_smooth
+        return left_l1, right_l1 , lr_l1, rl_l1, left_smooth, right_smooth
 
 if __name__ == "__main__":
     from utils.disp_utils import load_exmaple
