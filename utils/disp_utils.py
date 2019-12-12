@@ -191,9 +191,9 @@ def depth_to_disp(depthL, depthR, camera_para):
     Returns:
         dispL, dispR: disparity of left view and right view
     """
-    l_intrinsic = torch.tensor(camera_para['left_intrinsic'])
-    r_intrinsic = torch.tensor(camera_para['right_intrinsic'])
-    translation = torch.tensor(camera_para['translation'])
+    l_intrinsic = camera_para['left_intrinsic'].clone().detach()
+    r_intrinsic = camera_para['right_intrinsic'].clone().detach()
+    translation = camera_para['translation'].clone().detach()
 
     l_f = ((l_intrinsic[:,0,0]+l_intrinsic[:,1,1])/2).view(-1,1,1,1).cuda()
     r_f = ((r_intrinsic[:,0,0]+r_intrinsic[:,1,1])/2).view(-1,1,1,1).cuda()

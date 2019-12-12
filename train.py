@@ -20,8 +20,8 @@ from model import SPAutoED as SPEDNet
 from utils.disp_utils import depth_to_disp
 
 parser = argparse.ArgumentParser(description='SPAutoED')
-parser.add_argument('--datapath', default='/media/xiran_zhang/2011_HDD7/EndoVis_SCARED')
-parser.add_argument('--epochs', type=int, default=100)
+parser.add_argument('--datapath', default='data/EndoVis_SCARED_subset')
+parser.add_argument('--epochs', type=int, default=500)
 parser.add_argument('--loadmodel', default=None, help='path to the trained model, for continuous training')
 parser.add_argument('--savemodel', default='./trained_model/', help='folder to the save the trained model')
 parser.add_argument('--seed', type=int, default=1, metavar='S', help='seed for random (default:1)')
@@ -30,7 +30,7 @@ args = parser.parse_args()
 writer = SummaryWriter()
 
 # set train environment
-os.environ['CUDA_VISIBLE_DEVICES'] = '0'
+# os.environ['CUDA_VISIBLE_DEVICES'] = '0'
 print('torch cuda status:', torch.cuda.is_available())
 if torch.cuda.is_available():
     cuda = True
