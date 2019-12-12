@@ -215,6 +215,8 @@ class AutoED(nn.Module):
 
         self.refine = nn.Sequential(
             ResBlock(6, 1, 1, 1, 1),
+            # nn.BatchNorm2d(1),
+            nn.Sigmoid()
         )
 
     def forward(self, x, img):
@@ -246,6 +248,6 @@ class AutoED(nn.Module):
         # print('depth size:', depth.size())
         # print('img size:', img.size())
         depth = torch.cat((depth, img), 1)
-        depth = self.refine(depth)
-
+        # depth = self.refine(depth)
+        depth = 100*self.refine(depth)
         return depth

@@ -68,7 +68,7 @@ pasued_epoch = -1
 # Option can be made here:
 # optimizer: Adam, SGD
 criteria = LossFunc.Loss_reonstruct()
-optimizer = torch.optim.Adam(model.parameters(), lr = 10e-3)
+optimizer = torch.optim.Adam(model.parameters(), lr = 2*10e-4)
 scheduler = torch.optim.lr_scheduler.StepLR(optimizer, 5, 0.7)
 
 # load model
@@ -118,7 +118,7 @@ def train(imgL, imgR, camera_para, model, optimizer):
     left_l1, right_l1, lr_l1, rl_l1, smooth_left_disp, smooth_right_disp = criteria(imgL, imgR, dispL, dispR)
     # print('left recons loss:', right_l1.data.item(), 'right recons loss:', left_l1.data.item(), 'lr consis loss:', lr_l1.data.item(),\
     #     'rl consis loss:', rl_l1.data.item(), 'smooth left disp:', smooth_left_disp, 'smooth right disp:', smooth_right_disp)
-    loss = 0.7*(left_l1 + right_l1) + 1.0 * (lr_l1 + rl_l1)+ 0.1*(smooth_left_disp + smooth_right_disp)
+    loss = 0.5*(left_l1 + right_l1) + 0.02 * (lr_l1 + rl_l1)+ 0.1*(smooth_left_disp + smooth_right_disp)
     # torch.autograd.set_detect_anomaly(True)
     loss.backward()
     optimizer.step()
@@ -142,9 +142,9 @@ def val(imgL, imgR, camera_para, model, optimizer, epoch):
         # plt.show()
         dispL, dispR = depth_to_disp(depthL, depthR, camera_para)
         left_l1, right_l1, lr_l1, rl_l1, smooth_left_disp, smooth_right_disp = criteria(imgL, imgR, dispL, dispR)
-        loss = 0.7*(left_l1 + right_l1) + 1.0 * (lr_l1 + rl_l1) + 0.1*(smooth_left_disp + smooth_right_disp)
+        loss = 0.5*(left_l1 + right_l1) + 0.02 * (lr_l1 + rl_l1) + 0.1*(smooth_left_disp + smooth_right_disp)
 
-    return loss.data.item()
+    return loss.data.item() 
 
 
 def main():
@@ -153,7 +153,7 @@ def main():
     print('Start training ...')
 
     total_iteration = 0
-    for epoch in range(start_epoch, total_epochs):
+    for epoch in range(0, total_epochs):
         print('\nEPOCH ' + str(epoch + 1) + ' of ' + str(total_epochs) + '\n')
         #-----------------Training---------------
         train_batch_num = 0

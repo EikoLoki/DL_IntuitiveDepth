@@ -53,17 +53,18 @@ def readPFM(file):
     img_right = cv2.imread(join(img_dir, "right_finalpass/frame_data{:>06}.png".format(indx)) )
     img_right = cv2.imread(join(img_dir, "right_finalpass/frame_data{:>06}.png".format(indx)) )
 
-def visualize(img_left, img_right, data):
+def visualize(img_left, img_right, img_recons, data):
     import matplotlib
     matplotlib.use("TkAgg")
     from matplotlib import pyplot as plt
-    fig, axes = plt.subplots(1,3)
+    fig, axes = plt.subplots(1,4)
     axes[0].imshow(img_left)
     axes[1].imshow(img_right)
-    axes[2].imshow((data+1e-4), cmap="plasma")
+    axes[2].imshow(img_recons)
+    axes[3].imshow((data+1e-4), cmap="plasma")
     plt.show()
-    input("Any key to continue")
-    print("OK")
+    # input("Any key to continue")
+    # print("OK")
 
 def SSIM(x, y, ksize = 5):
     
@@ -201,8 +202,18 @@ def depth_to_disp(depthL, depthR, camera_para):
     # print('depth size:', depthL.size())
     # print('left focal length size:', l_f.size())
 
-    dispL = l_f * bl / (depthL + 0.01)
-    dispR = r_f * bl / (depthR + 0.01)
+
+    # maskL = (depthL > 0.001)
+    # maskR = (depthR > 0.001)
+    # maskL.detach_()
+    # maskR.detach_()
+    # depthL = depthL*maskL.int().float()
+    # depthR = depthR*maskR.int().float()
+
+    dispL = l_f * bl / depthL
+    dispR = r_f * bl / depthR
+
+    # print(dispL)
 
     dispL = dispL.squeeze(1).type(torch.float32)
     dispR = dispR.squeeze(1).type(torch.float32)

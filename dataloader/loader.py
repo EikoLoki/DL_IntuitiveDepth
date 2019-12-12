@@ -41,10 +41,12 @@ class SCARED_loader(data.Dataset):
         if self.training:
             preprocess = transforms.Compose([
                 transforms.ToTensor()])
+                # transforms.Normalize([0.485,0.456,0.406],[0.229,0.224,0.225])])
         else:
             # no preprocess, just toTensor here
             preprocess = transforms.Compose([
                 transforms.ToTensor()])
+                # transforms.Normalize([0.485,0.456,0.406],[0.229,0.224,0.225])])
 
 
         left = preprocess(left_img)
