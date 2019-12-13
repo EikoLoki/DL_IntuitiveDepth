@@ -90,14 +90,18 @@ class Loss_reonstruct(nn.Module):
         # left_disp_cpu.detach_()
         # right_disp_cpu.detach_()
 
+        # print(left_disp_cpu)
         # visualize(left_data_cpu[0,0], right_data_cpu[0,0], left_recons_cpu[0,0], left_disp_cpu[0])
         # visualize(left_data_cpu[0,0], right_data_cpu[0,0], right_recons_cpu[0,0], right_disp_cpu[0])
         
         res_loss_l = SSIM(left_recons, left_data)
-        left_l1 = torch.abs(res_loss_l).mean()
+        left_ssim = torch.abs(res_loss_l).mean()
+        left_l1 = F.l1_loss(res_loss_l, left_data)
 
         res_loss_r = SSIM(right_recons, right_data)
-        right_l1 = torch.abs(res_loss_r).mean()
+        right_ssim = torch.abs(res_loss_r).mean()
+        right_l1 = F.l1_loss(right_recons, right_data)
+
         loss_lr = consistent_lr(left_disp, right_disp, left_grid=self.base_grid)
         loss_rl = consistent_rl(left_disp, right_disp, right_grid=self.base_grid)
         lr_l1 = torch.abs(loss_lr).mean()
@@ -106,7 +110,7 @@ class Loss_reonstruct(nn.Module):
         left_smooth  = self.smoothness_term(left_disp).mean()
         right_smooth = self.smoothness_term(right_disp).mean()
 
-        return left_l1, right_l1 , lr_l1, rl_l1, left_smooth, right_smooth
+        return left_ssim, right_ssim, left_l1, right_l1 , lr_l1, rl_l1, left_smooth, right_smooth
 
 if __name__ == "__main__":
     from utils.disp_utils import load_exmaple

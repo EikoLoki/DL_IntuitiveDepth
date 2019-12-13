@@ -84,7 +84,7 @@ def SCARED_lister(filepath):
     val_left_img, val_right_img, val_cam_para = get_data(val_keyframes)
     test_left_img, test_right_img, test_cam_para = get_data(test_keyframes, test=True)
 
-    return train_left_img[:1000], train_right_img[:1000], train_cam_para[:1000], val_left_img, val_right_img, val_cam_para, test_left_img, test_right_img, test_cam_para
+    return train_left_img[-2000:], train_right_img[-2000:], train_cam_para[-2000:], val_left_img[:1000], val_right_img[:1000], val_cam_para[:1000], test_left_img, test_right_img, test_cam_para
 
 
 # def test():

@@ -175,7 +175,7 @@ class AutoED(nn.Module):
 
         self.deconv2 = nn.Sequential(
             # nn.MaxUnpool2d(2,2),            # output size: 1/16H*1/16W*256
-            deconvbn(256, 256, 3, 1, 1, 1),
+            deconvbn(512, 256, 3, 1, 1, 1),     # input change to 512
             nn.ReLU(inplace=True),          # output size: 1/16H*1/16W*256
             deconvbn(256, 256, 3, 1, 1, 1),
             nn.ReLU(inplace=True),          # ouptut size: 1/16H*1/16W*256
@@ -185,7 +185,7 @@ class AutoED(nn.Module):
 
         self.deconv3 = nn.Sequential(
             # nn.MaxUnpool2d(2,2),            # output size: 1/8H*1/8W*128
-            deconvbn(128, 128, 3, 1, 1, 1),
+            deconvbn(256, 128, 3, 1, 1, 1),     # input change to 256
             nn.ReLU(inplace=True),          # output size: 1/8H*1/8W*128
             deconvbn(128, 64, 3, 1, 1, 1),  
             nn.ReLU(inplace=True)           # output size: 1/8H*1/8W*64
@@ -193,7 +193,7 @@ class AutoED(nn.Module):
 
         self.deconv4 = nn.Sequential(
             # nn.MaxUnpool2d(2,2),            # output size: 1/4H*1/4W*64
-            deconvbn(64, 64, 3, 1, 1, 1),
+            deconvbn(128, 64, 3, 1, 1, 1),      # input change to 128
             nn.ReLU(inplace=True),          # output size: 1/4H*1/4W*64
             deconvbn(64, 32, 3, 1, 1, 1),
             nn.ReLU(inplace=True)           # output size: 1/4H*1/4W*32
@@ -210,7 +210,7 @@ class AutoED(nn.Module):
         )
 
         self.refine = nn.Sequential(
-            ResBlock(6, 1, 1, 1, 1),
+            ResBlock(3, 1, 1, 1, 1),
             nn.BatchNorm2d(1),
             nn.Sigmoid()
         )
@@ -231,19 +231,27 @@ class AutoED(nn.Module):
         code = code + out4
         # print('code size:', code.size())
         input2 = self.deconv1(code)     # output: 1/32(HxW)x256
-        input2 = input2 + out3
-        input3 = self.deconv2(self.unpool(input2, indices3))   # output: 1/16(HxW)x128
-        input3 = input3 + out2
-        input4 = self.deconv3(self.unpool(input3, indices2))   # output: 1/8(HxW)x64
-        input4 = input4 + out1
-        result = self.deconv4(self.unpool(input4, indices1))   # output: 1/4(HxW)x32
+
+        input2 = self.unpool(input2, indices3)
+        out3 = self.unpool(out3, indices3)
+        input2 = torch.cat([input2,out3],1)
+        input3 = self.deconv2(input2)   # output: 1/16(HxW)x128
+
+        input3 = self.unpool(input3, indices2)
+        out2 = self.unpool(out2, indices2)
+        input3 = torch.cat([input3,out2],1)
+        input4 = self.deconv3(input3)   # output: 1/8(HxW)x64
+
+        input4 = self.unpool(input4, indices1)
+        out1 = self.unpool(out1, indices1)
+        input4 = torch.cat([input4,out1],1)
+        result = self.deconv4(input4)   # output: 1/4(HxW)x32
         # upsample part:
         
         # print('result size:', result.size())
         depth = self.upsample(result)
         # print('depth size:', depth.size())
         # print('img size:', img.size())
-        depth = torch.cat((depth, img), 1)
         # depth = self.refine(depth)
-        depth = 256*self.refine(depth)
+        depth = 0.2*1280.0*self.refine(depth)
         return depth

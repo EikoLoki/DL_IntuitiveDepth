@@ -22,7 +22,7 @@ from utils.disp_utils import depth_to_disp
 parser = argparse.ArgumentParser(description='SPAutoED')
 parser.add_argument('--datapath', default='/media/xiran_zhang/2011_HDD7/EndoVis_SCARED')
 parser.add_argument('--epochs', type=int, default=100)
-parser.add_argument('--loadmodel', default='./trained_model/SPAutoED_2.tar', help='path to the trained model, for continuous training')
+parser.add_argument('--loadmodel', default=None, help='path to the trained model, for continuous training')
 parser.add_argument('--savemodel', default='./trained_model/', help='folder to the save the trained model')
 parser.add_argument('--seed', type=int, default=1, metavar='S', help='seed for random (default:1)')
 
@@ -68,7 +68,7 @@ pasued_epoch = -1
 # Option can be made here:
 # optimizer: Adam, SGD
 criteria = LossFunc.Loss_reonstruct()
-optimizer = torch.optim.Adam(model.parameters(), lr = 10e-5)
+optimizer = torch.optim.Adam(model.parameters(), lr = 1e-4)
 scheduler = torch.optim.lr_scheduler.StepLR(optimizer, 5, 0.7)
 
 # load model
@@ -118,14 +118,18 @@ def train(imgL, imgR, camera_para, model, optimizer):
     # plt.show()
 
 
-    left_l1, right_l1, lr_l1, rl_l1, smooth_left_disp, smooth_right_disp = criteria(imgL, imgR, dispL, dispR)
+    left_ssim, right_ssim, left_l1, right_l1, lr_l1, rl_l1, smooth_left_disp, smooth_right_disp = criteria(imgL, imgR, dispL, dispR)
 
     start_plane = torch.ones_like(depthL)*10
     # reg = F.l1_loss(depthL, start_plane) + F.l1_loss(depthR,start_plane)
 
-    print('left recons loss:', right_l1.data.item(), 'right recons loss:', left_l1.data.item(), 'lr consis loss:', lr_l1.data.item(),\
-        'rl consis loss:', rl_l1.data.item(), 'smooth left disp:', smooth_left_disp, 'smooth right disp:', smooth_right_disp)
-    loss = 0.5*(left_l1 + right_l1) + 1.0 * (lr_l1 + rl_l1) + 0.1 * (smooth_left_disp + smooth_right_disp)
+    print('left recons loss:', right_l1.data.item(), 'right recons loss:', left_l1.data.item(), \
+        'left recons l1:', left_l1.data.item(), 'right recons l1:', right_l1.data.item(), \
+        'lr consis loss:', lr_l1.data.item(), 'rl consis loss:', rl_l1.data.item(), \
+         'smooth left disp:', smooth_left_disp, 'smooth right disp:', smooth_right_disp)
+
+
+    loss = 0.85*(left_ssim + right_ssim) + 0.15*(left_l1 + right_l1) + 1.0 * (lr_l1 + rl_l1) + 0.1 * (smooth_left_disp + smooth_right_disp)
     # torch.autograd.set_detect_anomaly(True)
     loss.backward()
     optimizer.step()
@@ -150,8 +154,8 @@ def val(imgL, imgR, camera_para, model, optimizer, epoch):
         # dispL, dispR = depth_to_disp(depthL, depthR, camera_para)
         dispL, dispR = depthL.squeeze(1), depthR.squeeze(1)
         # reg = F.l1_loss(depthL) + F.l1_loss(depthR)
-        left_l1, right_l1, lr_l1, rl_l1, smooth_left_disp, smooth_right_disp = criteria(imgL, imgR, dispL, dispR)
-        loss = 0.5*(left_l1 + right_l1) + 1.0 * (lr_l1 + rl_l1) + 0.1*(smooth_right_disp + smooth_left_disp)
+        left_ssim, right_ssim, left_l1, right_l1, lr_l1, rl_l1, smooth_left_disp, smooth_right_disp = criteria(imgL, imgR, dispL, dispR)
+        loss = 0.85*(left_ssim + right_ssim) + 0.15*(left_l1 + right_l1) + 1.0 * (lr_l1 + rl_l1) + 0.1 * (smooth_left_disp + smooth_right_disp)
 
     return loss.data.item() 
 
