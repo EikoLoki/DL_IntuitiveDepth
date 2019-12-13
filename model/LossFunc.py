@@ -6,6 +6,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from utils.disp_utils import reconstruct_left, reconstruct_right, SSIM, consistent_lr, consistent_rl, visualize
 
+DEBUG = False
 class Loss_reonstruct(nn.Module):
     def __init__(self, n=4, h=1024, w=1280, default_device="cuda:0"):
         
@@ -75,24 +76,19 @@ class Loss_reonstruct(nn.Module):
         left_recons = reconstruct_left(right_data, left_disp, left_grid=self.base_grid)
         right_recons = reconstruct_right(left_data, right_disp)
 
-        # visualization
-        # left_recons_cpu = left_recons.cpu()
-        # right_recons_cpu = right_recons.cpu()
-        # left_data_cpu = left_data.cpu()
-        # right_data_cpu = right_data.cpu()
-        # left_disp_cpu = left_disp.cpu()
-        # right_disp_cpu = right_disp.cpu()
-
-        # left_recons_cpu.detach_()
-        # right_recons_cpu.detach_()
-        # left_data_cpu.detach_()
-        # right_data_cpu.detach_()
-        # left_disp_cpu.detach_()
-        # right_disp_cpu.detach_()
-
-        # visualize(left_data_cpu[0,0], right_data_cpu[0,0], left_recons_cpu[0,0], left_disp_cpu[0])
-        # visualize(left_data_cpu[0,0], right_data_cpu[0,0], right_recons_cpu[0,0], right_disp_cpu[0])
-        
+        if DEBUG:
+            # visualization
+            left_recons_cpu = left_recons.cpu().detach_()
+            right_recons_cpu = right_recons.cpu().detach_()
+            left_data_cpu = left_data.cpu().detach_()
+            right_data_cpu = right_data.cpu().detach_()
+            left_disp_cpu = left_disp.cpu().detach_()
+            right_disp_cpu = right_disp.cpu().detach_()
+            for i in range(left_data_cpu.shape[0]):
+                data_path = "temp_vis/"
+                visualize(left_data_cpu[i,:,:,:], right_data_cpu[i,:,:,:], left_recons_cpu[i,:,:], left_disp_cpu[i], save_path=data_path+"left_{}.jpg".format(i))
+                visualize(left_data_cpu[i,:,:,:], right_data_cpu[i,:,:,:], right_recons_cpu[i,:,:], right_disp_cpu[i], save_path=data_path+"right_{}.jpg".format(i))
+            
         res_loss_l = SSIM(left_recons, left_data)
         left_l1 = torch.abs(res_loss_l).mean()
 

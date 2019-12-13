@@ -4,6 +4,7 @@
 import os
 import time
 import argparse
+import sys
 import numpy as np
 import cv2
 from tqdm import tqdm
@@ -22,7 +23,7 @@ from utils.disp_utils import depth_to_disp,visualize
 parser = argparse.ArgumentParser(description='SPAutoED')
 parser.add_argument('--datapath', default='data/EndoVis_SCARED_subset')
 parser.add_argument('--epochs', type=int, default=500)
-parser.add_argument('--loadmodel', default='trained_model/SPAutoED_5.tar', help='path to the trained model, for continuous training')
+parser.add_argument('--loadmodel', default='trained_model/coloization/colorization_v3.tar', help='path to the trained model, for continuous training')
 parser.add_argument('--savemodel', default='./trained_model/', help='folder to the save the trained model')
 parser.add_argument('--seed', type=int, default=1, metavar='S', help='seed for random (default:1)')
 parser.add_argument('--use_cuda', type=bool, default=True, help='if true, use gpu')
@@ -36,7 +37,7 @@ if torch.cuda.is_available():
     cuda = True
 else:
     EnvironmentError('cuda status error.')
-DEBUG = False
+DEBUG = True
 
 # load all data
 train_left_img, train_right_img, train_cam_para,\
@@ -45,11 +46,11 @@ train_left_img, train_right_img, train_cam_para,\
     
 trainImgLoader = torch.utils.data.DataLoader(
     ld.SCARED_loader(train_left_img, train_right_img, train_cam_para, training=True),
-    batch_size=70, shuffle=True, num_workers=8, drop_last=False
+    batch_size=60, shuffle=True, num_workers=8, drop_last=False
     )
 valImgLoader = torch.utils.data.DataLoader(
     ld.SCARED_loader(val_left_img, val_right_img, val_cam_para, training=False),
-    batch_size=70, shuffle=False, num_workers=8, drop_last=False
+    batch_size=60, shuffle=False, num_workers=8, drop_last=False
 )
 testImgLoader = torch.utils.data.DataLoader(
     ld.SCARED_loader(test_left_img, test_right_img, test_cam_para, training=False),
@@ -58,24 +59,15 @@ testImgLoader = torch.utils.data.DataLoader(
 
 # create model
 model = SPEDNet.SPAutoED_colorization()
-if cuda and args.use_cuda:
-    model = nn.DataParallel(model)
-    model = model.cuda()
-else:
-    model.to("cpu")
-pasued_epoch = -1
-
-
-# set criteria, optimizer and scheduler
-# Option can be made here:
-# optimizer: Adam, SGD
-
-optimizer = torch.optim.Adam(model.parameters(), lr = 2*10e-4)
-scheduler = torch.optim.lr_scheduler.StepLR(optimizer, 5, 0.7)
+model = nn.DataParallel(model)
 
 # load model
 if args.loadmodel is not None:
-    state_dict = torch.load(args.loadmodel)
+    state_dict = torch.load(args.loadmodel, map_location={'cuda:0': 'cpu'})
+    for k in state_dict['state_dict']:
+        if "module.SP_extractor.conv0" in k:
+            print(state_dict['state_dict'][k])
+    sys.exit()
     model.load_state_dict(state_dict['state_dict'])
     pasued_epoch = state_dict['epoch']
     train_loss = state_dict['train_loss']
@@ -85,6 +77,18 @@ if args.loadmodel is not None:
     
 print('Number of model parameters: {}'.format(sum([p.data.nelement() for p in model.parameters()])))
 
+
+
+# set criteria, optimizer and scheduler
+# Option can be made here:
+# optimizer: Adam, SGD
+
+optimizer = torch.optim.Adam(model.parameters(), lr = 2*10e-4)
+scheduler = torch.optim.lr_scheduler.StepLR(optimizer, 5, 0.7)
+if cuda and args.use_cuda:
+    model = model.cuda()
+else:
+    model.to("cpu")
 
 # train function / validation function / test function
 def pretrain(imgL, imgR, model, criterion, optimizer):
@@ -145,6 +149,18 @@ def val_color(imgL, imgR, model, criterion, optimizer):
         loss_L = criterion(img_color_L, imgL)
         loss_R = criterion(img_color_R, imgR)
         loss = loss_L +loss_R
+        if DEBUG:
+            # visualization
+            left_recons_cpu = img_color_L.cpu().detach_()
+            right_recons_cpu = img_color_R.cpu().detach_()
+            left_data_cpu = imgL.cpu().detach_()
+            right_data_cpu = imgR.cpu().detach_()
+            
+            for i in range(left_data_cpu.shape[0]):
+                data_path = "temp_vis/"
+                visualize(left_data_cpu[i,:,:,:], right_data_cpu[i,:,:,:], left_recons_cpu[i,:,:], right_recons_cpu[i], save_path=data_path+"left_{}.jpg".format(i))
+            print(loss.data.item())
+            sys.exit()
 
     return loss.data.item() 
 
@@ -203,6 +219,10 @@ def main():
 
     writer.close()
 
+def test():
+    criterion = nn.MSELoss()
+    for idx, (left, right, para_dict) in enumerate(tqdm(valImgLoader)):
+        val_loss = val_color(left, right, model, criterion, optimizer)
 if __name__ == '__main__':
-    main()
-    # test()
+    #main()
+    test()

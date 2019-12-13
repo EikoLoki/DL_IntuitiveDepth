@@ -25,6 +25,35 @@ class SPAutoED(nn.Module):
         depth = self.EDcoder(feature,x)
         return depth
 
+class SPAutoED_colorization(nn.Module):
+    def __init__(self):
+        super(SPAutoED_colorization, self).__init__()
+        self.SP_extractor = SP_Feature_Extractor()
+
+        self.SP_extractor.conv0 = nn.Sequential(
+            convbn(1, 32, 3, 2, 1, 1),
+            nn.ReLU(inplace=True),
+            convbn(32, 32, 3, 1, 1, 1),
+            nn.ReLU(inplace=True),
+            convbn(32, 32, 3, 1, 1, 1),
+            nn.ReLU(inplace=True)
+        )
+
+        self.EDcoder = AutoED()
+        
+        for m in self.modules():
+            if isinstance(m, nn.Conv2d):
+                n = m.kernel_size[0] * m.kernel_size[1] * m.out_channels
+                m.weight.data.normal_(0, math.sqrt(2. / n))
+            elif isinstance(m, nn.BatchNorm2d):
+                m.weight.data.fill_(1)
+                m.bias.data.zero_()
+
+    def forward(self, x):
+        # extract features:
+        feature = self.SP_extractor(x)
+        depth = self.EDcoder(feature,x)
+        return depth
 
 class SP_Feature_Extractor(nn.Module):
     def __init__(self):
@@ -216,7 +245,7 @@ class AutoED(nn.Module):
         self.refine = nn.Sequential(
             ResBlock(6, 1, 1, 1, 1),
             # nn.BatchNorm2d(1),
-            nn.Sigmoid()
+            nn.ReLU()
         )
 
     def forward(self, x, img):
@@ -248,6 +277,6 @@ class AutoED(nn.Module):
         # print('depth size:', depth.size())
         # print('img size:', img.size())
         depth = torch.cat((depth, img), 1)
-        # depth = self.refine(depth)
-        depth = 100*self.refine(depth)
+        depth = torch.clamp(100*self.refine(depth), 20, 500)
+        
         return depth
