@@ -53,16 +53,35 @@ def readPFM(file):
     img_right = cv2.imread(join(img_dir, "right_finalpass/frame_data{:>06}.png".format(indx)) )
     img_right = cv2.imread(join(img_dir, "right_finalpass/frame_data{:>06}.png".format(indx)) )
 
-def visualize(img_left, img_right, img_recons, data):
+def visualize(img_left, img_right, img_recons, data, save_path=None):
     import matplotlib
-    matplotlib.use("TkAgg")
+    matplotlib.use("Agg")
     from matplotlib import pyplot as plt
-    fig, axes = plt.subplots(1,4)
-    axes[0].imshow(img_left)
-    axes[1].imshow(img_right)
-    axes[2].imshow(img_recons)
-    axes[3].imshow((data+1e-4), cmap="plasma")
-    plt.show()
+    import matplotlib.colors as colors
+    fig, axes = plt.subplots(2,2)
+    if img_left.shape[0] == 3:
+        img_left = np.transpose(img_left, (1,2,0))
+    if img_right.shape[0] == 3:
+        img_right = np.transpose(img_right, (1,2,0))
+    if img_recons.shape[0] == 3:
+        img_recons = np.transpose(img_recons, (1,2,0))
+    axes[0,0].imshow(img_left)
+    axes[0,1].imshow(img_right)
+    axes[1,0].imshow(img_recons)
+    if len(data.shape) == 2: 
+        bounds = 10*np.arange(13)
+        #pcm = axes[1,1].imshow((data+1e-4), cmap="PuBu_r", norm=colors.LogNorm(vmin=data.min(), vmax=data.max()))
+        pcm = axes[1,1].imshow((data+1e-4), cmap="PuBu_r", norm=colors.BoundaryNorm(boundaries=bounds, ncolors=256) )
+        fig.colorbar(pcm, ax=axes[1,1], extend='max')
+    else:
+        data = np.transpose(data, (1,2,0))
+        axes[1,1].imshow(data)
+    
+    if save_path is None:
+        plt.show()
+    else:
+        plt.savefig(save_path)
+        plt.close()
     # input("Any key to continue")
     # print("OK")
 

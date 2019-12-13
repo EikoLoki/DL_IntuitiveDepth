@@ -137,3 +137,5 @@ data/*
 .vscode/*
 runs/
 
+temp_vis/*
+test.py
