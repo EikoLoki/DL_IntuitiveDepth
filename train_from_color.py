@@ -23,8 +23,8 @@ from utils.disp_utils import depth_to_disp
 parser = argparse.ArgumentParser(description='SPAutoED')
 parser.add_argument('--datapath', default='data/EndoVis_SCARED_subset')
 parser.add_argument('--epochs', type=int, default=500)
-parser.add_argument('--loadmodel', default=None, help='path to the trained model, for continuous training')
-parser.add_argument('--loadcolor', default="trained_model/coloization/colorization_v2.tar", help='path to the pretrained colorization model')
+parser.add_argument('--loadmodel', default="trained_model/from_color/SPAutoED_3.tar", help='path to the trained model, for continuous training')
+parser.add_argument('--loadcolor', default=None, help='path to the pretrained colorization model')
 parser.add_argument('--savemodel', default='./trained_model/', help='folder to the save the trained model')
 parser.add_argument('--seed', type=int, default=1, metavar='S', help='seed for random (default:1)')
 parser.add_argument('--use_cuda', type=bool, default=True, help='if true, use gpu')
@@ -32,7 +32,7 @@ args = parser.parse_args()
 writer = SummaryWriter()
 
 # set train environment
-# os.environ['CUDA_VISIBLE_DEVICES'] = '0'
+os.environ['CUDA_VISIBLE_DEVICES'] = '0, 1'
 print('torch cuda status:', torch.cuda.is_available())
 if torch.cuda.is_available():
     cuda = True
@@ -47,11 +47,11 @@ train_left_img, train_right_img, train_cam_para,\
     
 trainImgLoader = torch.utils.data.DataLoader(
     ld.SCARED_loader(train_left_img, train_right_img, train_cam_para, training=True),
-    batch_size=60, shuffle=True, num_workers=8, drop_last=False
+    batch_size=15, shuffle=True, num_workers=8, drop_last=False
     )
 valImgLoader = torch.utils.data.DataLoader(
     ld.SCARED_loader(val_left_img, val_right_img, val_cam_para, training=False),
-    batch_size=60, shuffle=False, num_workers=8, drop_last=False
+    batch_size=15, shuffle=False, num_workers=8, drop_last=False
 )
 testImgLoader = torch.utils.data.DataLoader(
     ld.SCARED_loader(test_left_img, test_right_img, test_cam_para, training=False),
@@ -74,6 +74,14 @@ optimizer = torch.optim.Adam(model.parameters(), lr = 2e-4)
 scheduler = torch.optim.lr_scheduler.StepLR(optimizer, 5, 0.7)
 
 # load model
+if args.loadcolor is not None:
+    current_dict = model.state_dict()
+    color_state_dict = torch.load(args.loadcolor, map_location={'cuda:0': 'cpu'})
+    for k in color_state_dict['state_dict']:
+        if "SP_extractor.conv0" not in k:
+            current_dict[k] = color_state_dict['state_dict'][k] 
+    model.load_state_dict(current_dict)
+
 if args.loadmodel is not None:
     state_dict = torch.load(args.loadmodel)
     model.load_state_dict(state_dict['state_dict'])
@@ -83,13 +91,6 @@ if args.loadmodel is not None:
     scheduler = state_dict['scheduler']
     optimizer = state_dict['optimizer']
 
-if args.loadcolor is not None:
-    current_dict = model.state_dict()
-    color_state_dict = torch.load(args.loadcolor, map_location={'cuda:0': 'cpu'})
-    for k in color_state_dict['state_dict']:
-        if "SP_extractor.conv0" not in k:
-            current_dict[k] = color_state_dict['state_dict'][k] 
-    model.load_state_dict(current_dict)
 
 if cuda and args.use_cuda:    
     model = model.cuda()
@@ -112,7 +113,7 @@ def train(imgL, imgR, camera_para, model, optimizer):
     dispL, dispR = depth_to_disp(depthL, depthR, camera_para)
     
     left_l1, right_l1, lr_l1, rl_l1, smooth_left_disp, smooth_right_disp = criteria(imgL, imgR, dispL, dispR)
-    loss = 0.5*(left_l1 + right_l1) + 0.02 * (lr_l1 + rl_l1)+ 0.1*(smooth_left_disp + smooth_right_disp)
+    loss = 0.5*(left_l1 + right_l1) + 1.0 * (lr_l1 + rl_l1) / 250.0 + 0.1*(smooth_left_disp + smooth_right_disp)/250.0
     loss.backward()
     optimizer.step()
     
@@ -130,10 +131,9 @@ def val(imgL, imgR, camera_para, model, optimizer, epoch):
 
         dispL, dispR = depth_to_disp(depthL, depthR, camera_para)
         left_l1, right_l1, lr_l1, rl_l1, smooth_left_disp, smooth_right_disp = criteria(imgL, imgR, dispL, dispR)
-        loss = 0.5*(left_l1 + right_l1) + 0.02 * (lr_l1 + rl_l1) + 0.1*(smooth_left_disp + smooth_right_disp)
+        loss = 0.5*(left_l1 + right_l1) + 1.0 * (lr_l1 + rl_l1) /250.0  + 0.1*(smooth_left_disp + smooth_right_disp) / 250.0
 
     return loss.data.item() 
-
 
 def main():
     start_epoch = pasued_epoch+1

@@ -88,12 +88,20 @@ class Loss_reonstruct(nn.Module):
                 data_path = "temp_vis/"
                 visualize(left_data_cpu[i,:,:,:], right_data_cpu[i,:,:,:], left_recons_cpu[i,:,:], left_disp_cpu[i], save_path=data_path+"left_{}.jpg".format(i))
                 visualize(left_data_cpu[i,:,:,:], right_data_cpu[i,:,:,:], right_recons_cpu[i,:,:], right_disp_cpu[i], save_path=data_path+"right_{}.jpg".format(i))
-            
+            import sys 
+            sys.exit()
+
+        alpha = 0.8
         res_loss_l = SSIM(left_recons, left_data)
-        left_l1 = torch.abs(res_loss_l).mean()
+        left_ssim = torch.abs(res_loss_l).mean()
+        left_l1 = F.l1_loss(left_recons, left_data)
+        left_loss = alpha*left_l1 + (1- alpha)*left_ssim
 
         res_loss_r = SSIM(right_recons, right_data)
-        right_l1 = torch.abs(res_loss_r).mean()
+        right_ssim = torch.abs(res_loss_r).mean()
+        right_l1 = F.l1_loss(right_recons, right_data)
+        right_loss = alpha*right_l1 + (1- alpha)*right_ssim
+
         loss_lr = consistent_lr(left_disp, right_disp, left_grid=self.base_grid)
         loss_rl = consistent_rl(left_disp, right_disp, right_grid=self.base_grid)
         lr_l1 = torch.abs(loss_lr).mean()
