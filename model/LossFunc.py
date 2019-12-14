@@ -4,7 +4,8 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from utils.disp_utils import reconstruct_left, reconstruct_right, SSIM, consistent_lr, consistent_rl, visualize
+from utils.disp_utils import reconstruct_left, reconstruct_right, SSIM, consistent_lr, consistent_rl, \
+reconstruct_left_monodepth, reconstruct_right_monodepth,consistent_lr_monodepth, consistent_rl_monodepth,visualize
 
 class Loss_reonstruct(nn.Module):
     def __init__(self, n=4, h=1024, w=1280, default_device="cuda:0"):
@@ -72,27 +73,13 @@ class Loss_reonstruct(nn.Module):
             self.base_grid = self.base_grid.type(data_type).to(device)
             self.data_type, self.device = data_type, device
         
+        # old version writen by Pengfei
         left_recons = reconstruct_left(right_data, left_disp, left_grid=self.base_grid)
         right_recons = reconstruct_right(left_data, right_disp)
 
-        # visualization
-        # left_recons_cpu = left_recons.cpu()
-        # right_recons_cpu = right_recons.cpu()
-        # left_data_cpu = left_data.cpu()
-        # right_data_cpu = right_data.cpu()
-        # left_disp_cpu = left_disp.cpu()
-        # right_disp_cpu = right_disp.cpu()
-
-        # left_recons_cpu.detach_()
-        # right_recons_cpu.detach_()
-        # left_data_cpu.detach_()
-        # right_data_cpu.detach_()
-        # left_disp_cpu.detach_()
-        # right_disp_cpu.detach_()
-
-        # print(left_disp_cpu)
-        # visualize(left_data_cpu[0,0], right_data_cpu[0,0], left_recons_cpu[0,0], left_disp_cpu[0])
-        # visualize(left_data_cpu[0,0], right_data_cpu[0,0], right_recons_cpu[0,0], right_disp_cpu[0])
+        # new version from monodepth
+        # left_recons = reconstruct_left_monodepth(right_data, left_disp, left_grid=self.base_grid)
+        # right_recons = reconstruct_right_monodepth(left_data, right_disp, right_grid=self.base_grid)
         
         res_loss_l = SSIM(left_recons, left_data)
         left_ssim = torch.abs(res_loss_l).mean()
@@ -102,10 +89,45 @@ class Loss_reonstruct(nn.Module):
         right_ssim = torch.abs(res_loss_r).mean()
         right_l1 = F.l1_loss(right_recons, right_data)
 
-        loss_lr = consistent_lr(left_disp, right_disp, left_grid=self.base_grid)
-        loss_rl = consistent_rl(left_disp, right_disp, right_grid=self.base_grid)
+        # old version writen by Pengfei
+        loss_lr, left_disp_recons = consistent_lr(left_disp, right_disp, left_grid=self.base_grid)
+        loss_rl, right_disp_recons = consistent_rl(left_disp, right_disp, right_grid=self.base_grid)
         lr_l1 = torch.abs(loss_lr).mean()
         rl_l1 = torch.abs(loss_rl).mean()
+
+        # visualization
+        left_recons_cpu = left_recons.cpu()
+        right_recons_cpu = right_recons.cpu()
+        left_data_cpu = left_data.cpu()
+        right_data_cpu = right_data.cpu()
+        left_disp_cpu = left_disp.cpu()
+        right_disp_cpu = right_disp.cpu()
+        left_disp_recons_cpu = left_disp_recons.cpu()
+        right_disp_recons_cpu = right_disp_recons.cpu()
+        loss_lr_cpu = loss_lr.cpu()
+        loss_rl_cpu = loss_rl.cpu()
+        
+
+        left_recons_cpu.detach_()
+        right_recons_cpu.detach_()
+        left_data_cpu.detach_()
+        right_data_cpu.detach_()
+        left_disp_cpu.detach_()
+        right_disp_cpu.detach_()
+        left_disp_recons_cpu.detach_()
+        right_disp_recons_cpu.detach_()
+        loss_lr_cpu.detach_()
+        loss_rl_cpu.detach_()
+
+        print(left_disp_cpu)
+        visualize(left_data_cpu[0,0], right_data_cpu[0,0], left_recons_cpu[0,0], left_disp_cpu[0])
+        visualize(left_data_cpu[0,0], right_data_cpu[0,0], right_recons_cpu[0,0], right_disp_cpu[0])
+        visualize(left_disp_cpu[0], right_disp_cpu[0], left_disp_recons_cpu[0,0], loss_lr_cpu[0])
+        visualize(left_disp_cpu[0], right_disp_cpu[0], right_disp_recons_cpu[0,0], loss_rl_cpu[0])
+        
+        # new version from Monodepth
+        # lr_l1 = consistent_lr_monodepth(left_disp, right_disp, left_grid=self.base_grid)
+        # rl_l1 = consistent_rl_monodepth(left_disp, right_disp, right_grid=self.base_grid)
 
         left_smooth  = self.smoothness_term(left_disp).mean()
         right_smooth = self.smoothness_term(right_disp).mean()

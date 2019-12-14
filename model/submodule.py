@@ -10,9 +10,11 @@ def convbn(in_planes, out_planes, kernel_size, stride, pad, dilation):
         nn.BatchNorm2d(out_planes)
     )
 
-def deconvbn(in_planes, out_planes, kernel_size, stride, pad, dilation):
+def deconvbn(in_planes, out_planes, kernel_size, stride, pad, out_pad, dilation):
     return nn.Sequential(
-        nn.ConvTranspose2d(in_planes, out_planes, kernel_size, stride=stride, padding=dilation if dilation > 1 else pad, dilation=dilation),
+        nn.ConvTranspose2d(in_planes, out_planes, kernel_size, stride=stride, padding=pad, output_padding=dilation if dilation > 1 else out_pad, dilation=dilation),
+        # nn.UpsamplingBilinear2d(scale_factor=stride),
+        # nn.Conv2d(in_planes, out_planes, kernel_size, stride=1, padding=pad),
         nn.BatchNorm2d(out_planes)
     )
 
@@ -26,7 +28,7 @@ class ResBlock(nn.Module):
 
         self.conv1 = nn.Sequential(
             convbn(in_planes, out_planes, 3, stride, pad, dilation),
-            nn.ReLU(inplace=True)
+            nn.ELU(inplace=True)
         )
         self.conv2 = convbn(out_planes, out_planes, 3, 1, pad, dilation)
 
@@ -43,5 +45,5 @@ class ResBlock(nn.Module):
         
         out += x
         # print('addition success')
-        out = F.relu(out, inplace=True)
+        out = F.elu(out, inplace=True)
         return out

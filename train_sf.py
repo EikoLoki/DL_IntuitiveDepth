@@ -13,16 +13,16 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.utils.tensorboard import SummaryWriter
 
-import dataloader.listfile as lf
-import dataloader.loader as ld
+import dataloader.sf_listfile as lf
+import dataloader.sf_loader as ld
 from model import LossFunc
 from model import SPAutoED as SPEDNet
 from utils.disp_utils import depth_to_disp
 
 parser = argparse.ArgumentParser(description='SPAutoED')
-parser.add_argument('--datapath', default='/media/xiran_zhang/2011_HDD7/EndoVis_SCARED')
+parser.add_argument('--datapath', default='/media/xiran_zhang/Crypto/sceneflow/')
 parser.add_argument('--epochs', type=int, default=100)
-parser.add_argument('--loadmodel', default='./trained_model/SPAutoED_2.tar', help='path to the trained model, for continuous training')
+parser.add_argument('--loadmodel', default=None, help='path to the trained model, for continuous training')
 parser.add_argument('--savemodel', default='./trained_model/', help='folder to the save the trained model')
 parser.add_argument('--seed', type=int, default=1, metavar='S', help='seed for random (default:1)')
 
@@ -39,22 +39,15 @@ else:
 
 
 # load all data
-train_left_img, train_right_img, train_cam_para,\
-    val_left_img, val_right_img, val_cam_para, \
-    test_left_img, test_right_img, test_cam_para = lf.SCARED_lister(args.datapath)
-    
+all_left_img, all_right_img, test_left_img, test_right_img = lf.dataloader(args.datapath)
+
 trainImgLoader = torch.utils.data.DataLoader(
-    ld.SCARED_loader(train_left_img, train_right_img, train_cam_para, training=True),
-    batch_size=15, shuffle=True, num_workers=5, drop_last=False
-    )
+         ld.myImageFloder(all_left_img,all_right_img, True), 
+         batch_size= 10, shuffle= True, num_workers= 5, drop_last=False)
+
 valImgLoader = torch.utils.data.DataLoader(
-    ld.SCARED_loader(val_left_img, val_right_img, val_cam_para, training=False),
-    batch_size=15, shuffle=False, num_workers=5, drop_last=False
-)
-testImgLoader = torch.utils.data.DataLoader(
-    ld.SCARED_loader(test_left_img, test_right_img, test_cam_para, training=False),
-    batch_size=15, shuffle=False, num_workers=5, drop_last=False
-)
+         ld.myImageFloder(test_left_img,test_right_img, False), 
+         batch_size= 15, shuffle= False, num_workers= 5, drop_last=False)
 
 # create model
 model = SPEDNet.SPAutoED()
@@ -67,7 +60,7 @@ pasued_epoch = -1
 # set criteria, optimizer and scheduler
 # Option can be made here:
 # optimizer: Adam, SGD
-criteria = LossFunc.Loss_reonstruct()
+criteria = LossFunc.Loss_reonstruct().cuda()
 optimizer = torch.optim.Adam(model.parameters(), lr = 1e-4)
 scheduler = torch.optim.lr_scheduler.StepLR(optimizer, 5, 0.7)
 
@@ -77,17 +70,17 @@ if args.loadmodel is not None:
     model.load_state_dict(state_dict['state_dict'])
     pasued_epoch = state_dict['epoch']
     train_loss = state_dict['train_loss']
-    val_loss = state_dict['val_loss']
+    # val_loss = state_dict['val_loss']
     scheduler = state_dict['scheduler']
     optimizer = state_dict['optimizer']
-    print('train loss:', train_loss, 'val loss:', val_loss)
+    # print('train loss:', train_loss, 'val loss:', val_loss)
     
 
 print('Number of model parameters: {}'.format(sum([p.data.nelement() for p in model.parameters()])))
 
 
 # train function / validation function / test function
-def train(imgL, imgR, camera_para, model, optimizer):
+def train(imgL, imgR, model, optimizer):
     model.train()
 
     # plt.imshow(imgL[0,0])
@@ -129,14 +122,14 @@ def train(imgL, imgR, camera_para, model, optimizer):
          'smooth left disp:', smooth_left_disp, 'smooth right disp:', smooth_right_disp)
 
 
-    loss = 0.85*(left_ssim + right_ssim) + 0.15*(left_l1 + right_l1) + 1.0 * (lr_l1 + rl_l1) + 0.1 * (smooth_left_disp + smooth_right_disp)
+    loss = 0.85*(left_ssim + right_ssim) + 0.15*(left_l1 + right_l1) + 1.0 * (lr_l1 + rl_l1)/(960.0*0.2) + 0.1 * (smooth_left_disp + smooth_right_disp)/(960.0*0.2)
     # torch.autograd.set_detect_anomaly(True)
     loss.backward()
     optimizer.step()
     
     return loss.data.item()
 
-def val(imgL, imgR, camera_para, model, optimizer, epoch):
+def val(imgL, imgR, model, optimizer, epoch):
     model.eval()
     if cuda:
         imgL = imgL.cuda()
@@ -155,7 +148,7 @@ def val(imgL, imgR, camera_para, model, optimizer, epoch):
         dispL, dispR = depthL.squeeze(1), depthR.squeeze(1)
         # reg = F.l1_loss(depthL) + F.l1_loss(depthR)
         left_ssim, right_ssim, left_l1, right_l1, lr_l1, rl_l1, smooth_left_disp, smooth_right_disp = criteria(imgL, imgR, dispL, dispR)
-        loss = 0.85*(left_ssim + right_ssim) + 0.15*(left_l1 + right_l1) + 1.0 * (lr_l1 + rl_l1) + 0.1 * (smooth_left_disp + smooth_right_disp)
+        loss = 0.85*(left_ssim + right_ssim) + 0.15*(left_l1 + right_l1) + 1.0 * (lr_l1 + rl_l1)/(960.0*0.2) + 0.1 * (smooth_left_disp + smooth_right_disp)/(960.0*0.2)
 
     return loss.data.item() 
 
@@ -168,13 +161,13 @@ def main():
     total_iteration = 0
     for epoch in range(start_epoch, total_epochs):
         print('\nEPOCH ' + str(epoch + 1) + ' of ' + str(total_epochs) + '\n')
-        #-----------------Training---------------
+        # -----------------Training---------------
         train_batch_num = 0
         epoch_train_loss = 0
         
-        for idx, (left, right, para_dict) in enumerate(tqdm(trainImgLoader)):
+        for idx, (left, right) in enumerate(tqdm(trainImgLoader)):
             start_time = time.time()
-            train_loss = train(left, right, para_dict, model, optimizer)
+            train_loss = train(left, right, model, optimizer)
             epoch_train_loss += train_loss
             train_batch_num += 1
             total_iteration += 1
@@ -186,24 +179,24 @@ def main():
 
 
         #----------------Validation--------------
-        val_batch_num = 0
-        epoch_val_loss = 0
-        for idx, (left, right, para_dict) in enumerate(tqdm(valImgLoader)):
-            start_time = time.time()
-            val_loss = val(left, right, para_dict, model, optimizer, epoch)
-            epoch_val_loss += val_loss
-            val_batch_num += 1
-            print('Iter %d val loss = %.3f, time =  %.2f' %(idx, val_loss, time.time() - start_time))
+        # val_batch_num = 0
+        # epoch_val_loss = 0
+        # for idx, (left, right) in enumerate(tqdm(valImgLoader)):
+        #     start_time = time.time()
+        #     val_loss = val(left, right, model, optimizer, epoch)
+        #     epoch_val_loss += val_loss
+        #     val_batch_num += 1
+        #     print('Iter %d val loss = %.3f, time =  %.2f' %(idx, val_loss, time.time() - start_time))
 
-        epoch_val_loss /= val_batch_num
-        writer.add_scalar('Loss/val', epoch_val_loss, epoch+1)
+        # epoch_val_loss /= val_batch_num
+        # writer.add_scalar('Loss/val', epoch_val_loss, epoch+1)
 
         savefilename = args.savemodel + 'SPAutoED_' + str(epoch+1) + '.tar'
         torch.save({
             'epoch': epoch,
             'state_dict': model.state_dict(),
             'train_loss':epoch_train_loss,
-            'val_loss':epoch_val_loss,
+            # 'val_loss':epoch_val_loss,
             'optimizer':optimizer,
             'scheduler':scheduler
         }, savefilename)

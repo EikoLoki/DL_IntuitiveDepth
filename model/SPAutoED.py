@@ -13,7 +13,8 @@ class SPAutoED(nn.Module):
 
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
-                nn.init.xavier_uniform_(m.weight)
+                nn.init.kaiming_uniform_(m.weight)
+                # nn.init.xavier_uniform_(m.weight)
 
     def forward(self, x):
         # extract features:
@@ -158,59 +159,60 @@ class AutoED(nn.Module):
         # Connection part:
         self.coder = nn.Sequential(
             # nn.MaxPool2d(2,2),              # output size: 1/64H*1/64W*512
-            convbn(512, 512, 3, 1, 1, 1),   
+            convbn(512, 512, 3, 2, 1, 1),   
             nn.ReLU(inplace=True),          # output size: 1/64H*1/64W*512
+            deconvbn(512, 512, 3, 2, 1, 1, 1)
             # nn.MaxUnpool2d(2,2)             # output size: 1/32H*1/32W*512
         )
 
         # Decoder part:
         self.deconv1 = nn.Sequential(
-            deconvbn(512, 512, 3, 1, 1, 1), 
+            deconvbn(512, 512, 3, 2, 1, 1, 1), 
             nn.ReLU(inplace=True),          # output size: 1/32H*1/32W*512
-            deconvbn(512, 512, 3, 1, 1, 1),
+            convbn(512, 512, 3, 1, 1, 1),
             nn.ReLU(inplace=True),          # output size: 1/32H*1/32W*512
-            deconvbn(512, 256, 3, 1, 1, 1),
+            convbn(512, 256, 3, 1, 1, 1),
             nn.ReLU(inplace=True)           # output size: 1/32H*1/32W*256
         )
 
         self.deconv2 = nn.Sequential(
             # nn.MaxUnpool2d(2,2),            # output size: 1/16H*1/16W*256
-            deconvbn(512, 256, 3, 1, 1, 1),     # input change to 512
+            deconvbn(512, 256, 3, 2, 1, 1, 1),     # input change to 512
             nn.ReLU(inplace=True),          # output size: 1/16H*1/16W*256
-            deconvbn(256, 256, 3, 1, 1, 1),
+            convbn(256, 256, 3, 1, 1, 1),
             nn.ReLU(inplace=True),          # ouptut size: 1/16H*1/16W*256
-            deconvbn(256, 128, 3, 1, 1, 1),
+            convbn(256, 128, 3, 1, 1, 1),
             nn.ReLU(inplace=True)           # output size: 1/16H*1/16W*128
         )
 
         self.deconv3 = nn.Sequential(
             # nn.MaxUnpool2d(2,2),            # output size: 1/8H*1/8W*128
-            deconvbn(256, 128, 3, 1, 1, 1),     # input change to 256
+            deconvbn(256, 128, 3, 2, 1, 1, 1),     # input change to 256
             nn.ReLU(inplace=True),          # output size: 1/8H*1/8W*128
-            deconvbn(128, 64, 3, 1, 1, 1),  
+            convbn(128, 64, 3, 1, 1, 1),  
             nn.ReLU(inplace=True)           # output size: 1/8H*1/8W*64
         )
 
         self.deconv4 = nn.Sequential(
             # nn.MaxUnpool2d(2,2),            # output size: 1/4H*1/4W*64
-            deconvbn(128, 64, 3, 1, 1, 1),      # input change to 128
+            deconvbn(128, 64, 3, 2, 1, 1, 1),      # input change to 128
             nn.ReLU(inplace=True),          # output size: 1/4H*1/4W*64
-            deconvbn(64, 32, 3, 1, 1, 1),
+            convbn(64, 32, 3, 1, 1, 1),
             nn.ReLU(inplace=True)           # output size: 1/4H*1/4W*32
         )
 
-        self.pool = nn.MaxPool2d(2,2,return_indices=True)
+        self.pool = nn.MaxPool2d(2,2)
         self.unpool = nn.MaxUnpool2d(2,2)
 
         # Upsampling part:
         self.upsample = nn.Sequential(
             nn.UpsamplingBilinear2d(scale_factor=2),
-            ResBlock(32, 3, 1, 1, 1),
+            ResBlock(32, 16, 1, 1, 1),
             nn.UpsamplingBilinear2d(scale_factor=2)
         )
 
         self.refine = nn.Sequential(
-            ResBlock(3, 1, 1, 1, 1),
+            ResBlock(19, 1, 1, 1, 1),
             nn.BatchNorm2d(1),
             nn.Sigmoid()
         )
@@ -219,31 +221,32 @@ class AutoED(nn.Module):
         # input size: 1/4H*1/4*W*32
         # Encoder part:
         # print('input size:', x.size())
-        out1, indices1 = self.pool(self.conv1(x))            # output: 1/4(HxW)x64, skip connect to entry of deconv4
-        out2, indices2 = self.pool(self.conv2(out1))         # output: 1/8(HxW)x128, skip connect to entry of deconv3
-        out3, indices3 = self.pool(self.conv3(out2))         # output: 1/16(HxW)x256, skip connect to entry of deconv2
-        out4 = self.conv4(out3)                              # output: 1/32(HxW)x512, skip connect to entry of deconv1
+        out1 = self.pool(self.conv1(x))            # output: 1/4(HxW)x64, skip connect to entry of deconv4
+        out2 = self.pool(self.conv2(out1))         # output: 1/8(HxW)x128, skip connect to entry of deconv3
+        out3 = self.pool(self.conv3(out2))         # output: 1/16(HxW)x256, skip connect to entry of deconv2
+        out4 = self.pool(self.conv4(out3))                              # output: 1/32(HxW)x512, skip connect to entry of deconv1
         # connection part:
         # print('out size:', out4.size())
-        code, indices_code = self.pool(self.coder(out4))
-        code = self.unpool(code, indices_code)               # output: 1/32(HxW)x512
+        code = self.coder(out4)
+        # code = F.interpolate(code, scale_factor=2)               # output: 1/32(HxW)x512
+
         # Decoder part:
         code = code + out4
         # print('code size:', code.size())
         input2 = self.deconv1(code)     # output: 1/32(HxW)x256
 
-        input2 = self.unpool(input2, indices3)
-        out3 = self.unpool(out3, indices3)
+        # input2 = F.interpolate(input2, scale_factor=2)
+        # out3 = F.interpolate(out3, scale_factor=2)
         input2 = torch.cat([input2,out3],1)
         input3 = self.deconv2(input2)   # output: 1/16(HxW)x128
 
-        input3 = self.unpool(input3, indices2)
-        out2 = self.unpool(out2, indices2)
+        # input3 = F.interpolate(input3,scale_factor=2)
+        # out2 = F.interpolate(out2, scale_factor=2)
         input3 = torch.cat([input3,out2],1)
         input4 = self.deconv3(input3)   # output: 1/8(HxW)x64
 
-        input4 = self.unpool(input4, indices1)
-        out1 = self.unpool(out1, indices1)
+        # input4 = F.interpolate(input4, scale_factor=2)
+        # out1 = F.interpolate(out1, scale_factor=2)
         input4 = torch.cat([input4,out1],1)
         result = self.deconv4(input4)   # output: 1/4(HxW)x32
         # upsample part:
@@ -253,5 +256,6 @@ class AutoED(nn.Module):
         # print('depth size:', depth.size())
         # print('img size:', img.size())
         # depth = self.refine(depth)
-        depth = 0.2*1280.0*self.refine(depth)
+        depth = torch.cat([depth, img], 1)
+        depth = 0.2*960.0*self.refine(depth)
         return depth

@@ -5,6 +5,7 @@ import cv2
 import os 
 from os.path import join 
 import torch
+import torch.nn as nn
 import torch.nn.functional as F
 from torch.autograd import Variable 
 
@@ -66,25 +67,58 @@ def visualize(img_left, img_right, img_recons, data):
     # input("Any key to continue")
     # print("OK")
 
-def SSIM(x, y, ksize = 5):
+def visualize6(img_l, img_r, disp1, disp2, disp3, disp4):
+    import matplotlib
+    matplotlib.use("TkAgg")
+    from matplotlib import pyplot as plt
+    fig, axes = plt.subplots(2,3)
+    axes[0,0].imshow(img_l)
+    axes[0,1].imshow(img_r)
+    axes[0,2].imshow(disp1, cmap="plasma")
+    axes[1,0].imshow(disp2, cmap="plasma")
+    axes[1,1].imshow(disp3, cmap="plasma")
+    axes[1,2].imshow(disp4, cmap="plasma")
+    plt.show()
+    # input("Any key to continue")
+    # print("OK")
+
+def SSIM(x, y, ksize = 9):
     
+    # C1 = 0.01 ** 2
+    # C2 = 0.03 ** 2
+    # ps = ksize//2
+    # mu_x = F.avg_pool2d(x, kernel_size=ksize, stride=1, padding=ps)
+    # mu_y = F.avg_pool2d(y, kernel_size=ksize, stride=1, padding=ps)
+    
+    # sigma_x  = F.avg_pool2d(x * x, kernel_size=ksize, stride=1, padding=ps) - mu_x.pow(2)
+    # sigma_y  = F.avg_pool2d(y * y, kernel_size=ksize, stride=1, padding=ps) - mu_y.pow(2)
+    # sigma_xy = F.avg_pool2d(x * x, kernel_size=ksize, stride=1, padding=ps) - mu_x * mu_y
+
+    # SSIM_d = ((mu_x * mu_x + mu_y * mu_y) + C1) * (sigma_x + sigma_y + C2)
+    # #del sigma_x, sigma_y
+    # SSIM_n = (2 * mu_x * mu_y + C1) * (2 * sigma_xy + C2)
+    # #del sigma_xy
+    # loss_SSIM = SSIM_n / SSIM_d
+
+    # return torch.clamp((1 - loss_SSIM) / 2, 0, 1)
     C1 = 0.01 ** 2
     C2 = 0.03 ** 2
-    ps = ksize//2
-    mu_x = F.avg_pool2d(x, kernel_size=ksize, stride=1, padding=ps)
-    mu_y = F.avg_pool2d(y, kernel_size=ksize, stride=1, padding=ps)
-    
-    sigma_x  = F.avg_pool2d(x * x, kernel_size=ksize, stride=1, padding=ps) - mu_x.pow(2)
-    sigma_y  = F.avg_pool2d(y * y, kernel_size=ksize, stride=1, padding=ps) - mu_y.pow(2)
-    sigma_xy = F.avg_pool2d(x * x, kernel_size=ksize, stride=1, padding=ps) - mu_x * mu_y
 
-    SSIM_d = ((mu_x * mu_x + mu_y * mu_y) + C1) * (sigma_x + sigma_y + C2)
-    #del sigma_x, sigma_y
-    SSIM_n = (2 * mu_x * mu_y + C1) * (2 * sigma_xy + C2)
-    #del sigma_xy
-    loss_SSIM = SSIM_n / SSIM_d
+    mu_x = nn.AvgPool2d(3, 1, padding=1)(x)
+    mu_y = nn.AvgPool2d(3, 1, padding=1)(y)
+    mu_x_mu_y = mu_x * mu_y
+    mu_x_sq = mu_x.pow(2)
+    mu_y_sq = mu_y.pow(2)
 
-    return torch.clamp((1 - loss_SSIM) / 2, 0, 1)
+    sigma_x = nn.AvgPool2d(3, 1, padding=1)(x * x) - mu_x_sq
+    sigma_y = nn.AvgPool2d(3, 1, padding=1)(y * y) - mu_y_sq
+    sigma_xy = nn.AvgPool2d(3, 1, padding=1)(x * y) - mu_x_mu_y
+
+    SSIM_n = (2 * mu_x_mu_y + C1) * (2 * sigma_xy + C2)
+    SSIM_d = (mu_x_sq + mu_y_sq + C1) * (sigma_x + sigma_y + C2)
+    SSIM = SSIM_n / SSIM_d
+
+    return torch.clamp((1 - SSIM) / 2, 0, 1)
     
 
 def reconstruct_left(right_data, left_disp, left_grid=None):
@@ -131,6 +165,47 @@ def reconstruct_right(left_data, right_disp, right_grid=None):
 
     return right_recons
 
+def apply_disparity(img, disp):
+    batch_size, _, height, width = img.size()
+
+    # Original coordinates of pixels
+    x_base = torch.linspace(0, 1, width).repeat(batch_size, height, 1).type_as(img)
+    y_base = torch.linspace(0, 1, height).repeat(batch_size, width, 1).transpose(1, 2).type_as(img)
+
+    # Apply shift in X direction
+    x_shifts = disp[:, 0, :, :]  # Disparity is passed in NCHW format with 1 channel
+    flow_field = torch.stack((x_base + x_shifts, y_base), dim=3)
+    # In grid_sample coordinates are assumed to be between -1 and 1
+    output = F.grid_sample(img, 2*flow_field - 1, mode='bilinear', padding_mode='zeros')
+
+    return output
+
+def reconstruct_left_monodepth(right_img, left_disp, left_grid=None):
+    left_disp = left_disp.unsqueeze(1)
+    recons_left = apply_disparity(right_img, -left_disp)
+    return recons_left
+
+def reconstruct_right_monodepth(left_img, right_disp, right_grid=None):
+    right_disp = right_disp.unsqueeze(1)
+    recons_right = apply_disparity(left_img, right_disp)
+    return recons_right
+
+def consistent_lr_monodepth(left_disp, right_disp, left_grid=None):
+    right_disp = right_disp.unsqueeze(1)
+    left_disp = left_disp.unsqueeze(1)
+    recons_disp_left = apply_disparity(right_disp, -left_disp)
+    lr_loss = torch.mean(torch.abs(left_disp - recons_disp_left))
+    return lr_loss
+
+def consistent_rl_monodepth(left_disp, right_disp, right_grid=None):
+    right_disp = right_disp.unsqueeze(1)
+    left_disp = left_disp.unsqueeze(1)
+    recons_disp_right = apply_disparity(left_disp, right_disp)
+    rl_loss = torch.mean(torch.abs(left_disp - recons_disp_right))
+    return rl_loss
+
+
+
 def consistent_lr(left_disp, right_disp, left_grid = None):
     '''
     Args:
@@ -155,7 +230,7 @@ def consistent_lr(left_disp, right_disp, left_grid = None):
     
     left_disp_recons = F.grid_sample(right_disp.unsqueeze(1), grid_sample, mode='bilinear', padding_mode='zeros')
     
-    return left_disp_recons.squeeze() - left_disp
+    return left_disp_recons.squeeze() - left_disp, left_disp_recons
 
 def consistent_rl(left_disp, right_disp, right_grid = None):
     '''
@@ -180,8 +255,9 @@ def consistent_rl(left_disp, right_disp, right_grid = None):
     grid_sample = right_grid + torch.cat([2*right_disp.unsqueeze(-1)/w, torch.zeros(n,h,w,1, device=device, dtype=data_type)], 3)
     
     right_disp_recons = F.grid_sample(left_disp.unsqueeze(1), grid_sample, mode='bilinear', padding_mode='zeros')
+
     
-    return right_disp_recons.squeeze() - right_disp
+    return right_disp_recons.squeeze() - right_disp, right_disp_recons
 
 
 def depth_to_disp(depthL, depthR, camera_para):
